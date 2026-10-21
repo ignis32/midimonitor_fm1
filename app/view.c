@@ -383,7 +383,13 @@ static void draw_stats(void)
         s_dec(d, (int32_t)src_lost_seen[s], 6);
         cv_text(4, y, &FONT_XS, t, set.srcs >> s & 1u ? G_HI : G_DIM);
     }
-    y += 22;
+    y += 16;
+    d = s_cat(t, "SENT  USB");          /* what went out: thru, clock (plat_midi_count) */
+    d = s_dec(d, (int32_t)plat_midi_count(PORT_USB, 1), 8);
+    d = s_cat(d, "  BLE");
+    s_dec(d, (int32_t)plat_midi_count(PORT_BLE, 1), 8);
+    cv_text(4, y, &FONT_XS, t, G_HI);
+    y += 20;
     y = draw_bt_state(y);
     y += 8;
     cv_text(4, y, &FONT_XS, "CLOCK", G_MID);

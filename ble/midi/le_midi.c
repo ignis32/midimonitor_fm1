@@ -216,7 +216,8 @@ int ble_midi_send_many(const uint32_t *pkts, const uint16_t *ms, int n, int to) 
     u8 buf[64], run = 0;
     u32 len = 0, remain = 0, t0, tp;
     int i;
-    static u32 remain_max;
+    static u32 remain_max_of[4];                 /* per set of links: each its own empty buffer to wait for */
+    u32 remain_max;
     int to_p = (to & 1) && periph_ready(), to_c = (to & 2) && mc_ready();
     if (n <= 0)
         return 0;
@@ -237,8 +238,9 @@ int ble_midi_send_many(const uint32_t *pkts, const uint16_t *ms, int n, int to) 
 #else
     ble_op_att_get_remain(&remain);
 #endif
-    if (remain > remain_max)
-        remain_max = remain;
+    if (remain > remain_max_of[to_p | to_c << 1])
+        remain_max_of[to_p | to_c << 1] = remain;
+    remain_max = remain_max_of[to_p | to_c << 1];
     if (remain < remain_max || remain < 8u)
         return 0;
     t0 = tp = ms[0] & 0x1FFFu;

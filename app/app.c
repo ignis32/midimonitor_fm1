@@ -288,12 +288,41 @@ void app_say(const char *a, const char *b)
 
 static void speak(void)                  /* a screen reader that has just started listening hears the page */
 {
-    char t[64], *d;
+    char t[320], *d;                     /* (at most about 220: the reader's SAY takes 240) */
+    uint32_t s, o;
     if (ann_on() && ann_where()) {
         d = s_cat(t, APP_NAME ". ");
         d = s_cat(d, TAB_NAME[ui.tab]);
         if (ui.paused)
-            s_cat(d, ". PAUSED");
+            d = s_cat(d, ". PAUSED");
+        if (ui.tab == TAB_STATS) {       /* in and out, per source and output */
+            for (s = 0; s < NTAPS; s++) {
+                d = s_cat(d, ". ");
+                d = s_cat(d, SRC_NAME[s]);
+                d = s_cat(d, " IN ");
+                d = s_dec(d, (int32_t)src_events[s], 0);
+            }
+            d = s_cat(d, ". SENT USB ");
+            d = s_dec(d, (int32_t)plat_midi_count(PORT_USB, 1), 0);
+            d = s_cat(d, " BLE ");
+            s_dec(d, (int32_t)plat_midi_count(PORT_BLE, 1), 0);
+        } else if (ui.tab == TAB_THRU) { /* thru on or off, each source's routes and what it passed on */
+            d = s_cat(d, set.thru ? ". ON" : ". OFF");
+            for (s = 0; s < NTAPS; s++) {
+                d = s_cat(d, ". ");
+                d = s_cat(d, SRC_NAME[s]);
+                d = s_cat(d, " TO");
+                for (o = 0; o < NOUTS; o++)
+                    if (set.routes[s] >> o & 1u) {
+                        *d++ = ' ';
+                        d = s_cat(d, OUT_NAME[o]);
+                        if (rt_filtered(s, o))
+                            d = s_cat(d, " F");
+                    }
+                d = s_cat(d, " SENT ");
+                d = s_dec(d, (int32_t)ui.routed[s], 0);
+            }
+        }
         ann_say(t, 0, ANN_NOW);
     }
     ann_tick(plat_ms());
