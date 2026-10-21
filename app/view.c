@@ -222,26 +222,32 @@ static void draw_log(void)
 }
 
 /* ---------------------------------------------------------------- FILTER --- */
-static void draw_filter(void)
+/* a filter's channels and messages, the keys that toggle them; route: a route's (else the display's) */
+static void draw_filter_of(uint32_t chans, uint32_t types, int route)
 {
     uint32_t i;
     char t[8];
     cv_text(4, 2, &FONT_XS, "CHANNELS  (WHITE KEYS)", G_MID);
-    for (i = 0; i < 16u; i++) {        /* a cell a channel, lit when shown */
-        int32_t x = 4 + (int32_t)(i % 8u) * 29, y = 18 + (int32_t)(i / 8u) * 18, on = set.chans >> i & 1u;
+    for (i = 0; i < 16u; i++) {        /* a cell a channel, lit when it passes */
+        int32_t x = 4 + (int32_t)(i % 8u) * 29, y = 18 + (int32_t)(i / 8u) * 18, on = chans >> i & 1u;
         s_dec(t, (int32_t)i + 1, 0);
         cv_rect(x, y, 26, 15, on ? G_MID : G_FAINT);
         cv_text(x + (26 - text_w(&FONT_XS, t)) / 2, y + 2, &FONT_XS, t, on ? G_BG : G_DIM);
     }
     cv_text(4, 60, &FONT_XS, "MESSAGES  (BLACK KEYS)", G_MID);
     for (i = 0; i < NTY; i++) {
-        int32_t x = 4 + (int32_t)(i / 6u) * 118, y = 76 + (int32_t)(i % 6u) * 14, on = set.types >> i & 1u;
+        int32_t x = 4 + (int32_t)(i / 6u) * 118, y = 76 + (int32_t)(i % 6u) * 14, on = types >> i & 1u;
         cv_text(x, y, &FONT_XS, on ? "[X]" : "[ ]", on ? G_HI : G_DIM);
         cv_text(x + 4 * CW, y, &FONT_XS, TY_NAME[i], on ? G_HI : G_DIM);
     }
-    cv_text(4, 164, &FONT_XS, "FX USB  SEL TRS  ENV BLE-P  LFO BLE-C", G_DIM);
-    cv_text(4, 178, &FONT_XS, "OCT- NONE  OCT+ ALL  EDIT DEFAULTS", G_DIM);
+    if (route) {
+        cv_text(4, 164, &FONT_XS, "K1-3 OUT OCT- NONE OCT+ ALL EDIT=BACK", G_DIM);
+    } else {
+        cv_text(4, 164, &FONT_XS, "FX USB  SEL TRS  ENV BLE-P  LFO BLE-C", G_DIM);
+        cv_text(4, 178, &FONT_XS, "OCT- NONE  OCT+ ALL  EDIT DEFAULTS", G_DIM);
+    }
 }
+static void draw_filter(void) { draw_filter_of(set.chans, set.types, 0); }
 
 /* Bluetooth's state, three lines from y; returns the y after them */
 static int32_t draw_bt_state(int32_t y)
@@ -268,7 +274,22 @@ static void draw_thru(void)
     static const char *const KNOB[NOUTS] = {"K1", "K2", "K3"};
     uint32_t s, o, now = plat_ms();
     int32_t y = 2, x0 = 4 + 7 * CW, cw = 7 * CW;
-    char t[24];
+    char t[24], *d;
+    if (ui.rt_edit) {                  /* a route's filter: what of SOURCE goes to OUTPUT */
+        uint32_t so = ui.thru_row, oo = ui.rt_out;
+        cv_band(14, BODY_H - 14);      /* (the filter's layout, a line lower: the route on top) */
+        draw_filter_of(set.rt_chans[so][oo], set.rt_types[so][oo], 1);
+        cv_band(0, BODY_H);
+        d = s_cat(t, SRC_NAME[so]);
+        d = s_cat(d, " -> ");
+        s_cat(d, OUT_NAME[oo]);
+        text_inv(6, 0, &FONT_XS, t, G_HI);
+        if (SRC_SELF[so] >> oo & 1u)
+            cv_text(8 + text_w(&FONT_XS, t) + 6, 0, &FONT_XS, "(NOT A ROUTE)", G_DIM);
+        else if (!(set.routes[so] >> oo & 1u))
+            cv_text(8 + text_w(&FONT_XS, t) + 6, 0, &FONT_XS, "(ROUTE OFF)", G_DIM);
+        return;
+    }
     cv_text(4, y, &FONT_XS, "THRU", G_MID);
     if (set.thru)
         text_inv(4 + 6 * CW, y, &FONT_XS, "ON", G_HI);
@@ -296,14 +317,16 @@ static void draw_thru(void)
             else if (busy && on)
                 text_inv(x, y, &FONT_XS, "[>]", G_GLOW);
             else
-                cv_text(x, y, &FONT_XS, on ? "[X]" : "[ ]", on ? (set.thru ? G_HI : G_MID) : G_DIM);
+                cv_text(x, y, &FONT_XS, !on ? "[ ]" : rt_filtered(s, o) ? "[F]" : "[X]",
+                        on ? (set.thru ? G_HI : G_MID) : G_DIM);
         }
         s_dec(t, (int32_t)ui.routed[s], 6);
         cv_text(x0 + 3 * cw - CW, y, &FONT_XS, t, G_DIM);
     }
     y += 10;
-    cv_text(4, y, &FONT_XS, "SELECT: SOURCE  K1-K3: ITS OUTPUTS", G_DIM);
-    cv_text(4, y + 14, &FONT_XS, "SYSEX GOES TO USB ONLY (FOR NOW)", G_FAINT);
+    cv_text(4, y, &FONT_XS, "SELECT SOURCE  K1-K3 ITS OUTPUTS", G_DIM);
+    cv_text(4, y + 14, &FONT_XS, "EDIT A ROUTE'S FILTER  [F] FILTERED", G_DIM);
+    cv_text(4, y + 28, &FONT_XS, "SYSEX GOES TO USB ONLY (FOR NOW)", G_FAINT);
 }
 
 /* ------------------------------------------------------------------- GLO --- */

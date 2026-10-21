@@ -257,6 +257,35 @@ out
 raw DEV 90 40 64
 wait 20
 expect_out BLE-P 90 40 64
+# a route's filter (EDIT): BLE-C -> BLE-P lets channel 1 notes by, nothing else
+tap EDIT
+wait 20
+expect rt_edit 1
+spin K2 1
+wait 20
+tap OCT-
+wait 20
+expect rt_types31 0
+key w0 down
+wait 20
+key w0 up
+key b0 down
+wait 20
+key b0 up
+wait 20
+expect rt_chans31 1
+expect rt_types31 1
+shot thru_filter.png
+out
+raw DEV 91 40 64
+raw DEV B0 07 64
+raw DEV 90 41 64
+wait 20
+expect_out BLE-P 90 41 64
+tap EDIT
+wait 20
+expect rt_edit 0
+shot thru_filtered.png
 spin K4 1
 wait 20
 expect thru 0

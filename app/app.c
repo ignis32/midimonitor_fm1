@@ -21,7 +21,7 @@
  * The lights: the source buttons flash with what comes in (dim: hidden); the keys light with the notes held (F3..G5,
  * OCT- / OCT+: some below / above); PLAY green on the beat of a clock coming in, red while paused or on an error. */
 
-#define SET_MAGIC 0x4D4F4E32u            /* "MON2": the settings record; another magic loads defaults */
+#define SET_MAGIC 0x4D4F4E33u            /* "MON3": the settings record; another magic loads defaults */
 /* thru's outputs, a bit each (settings_t routes) */
 enum { OUT_USB, OUT_BLE_P, OUT_BLE_C, NOUTS };
 static const uint32_t OUT_TO[NOUTS] = {TO_USB, TO_BLE_P, TO_BLE_C};
@@ -39,6 +39,8 @@ typedef struct {
     uint8_t thru;                        /* thru on: what comes in goes out again by routes (thru()) */
     uint8_t routes[NTAPS];               /* per source: bit OUT_* = it goes out there */
     uint8_t rsv[3];
+    uint16_t rt_types[NTAPS][NOUTS];     /* each route's filter: bit TY_* passes (as the display's) */
+    uint16_t rt_chans[NTAPS][NOUTS];     /* bit c: channel c + 1 passes */
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -62,12 +64,25 @@ static struct {
     uint32_t msg_until;
     uint32_t keys, btn;
     uint32_t thru_row;                   /* the THRU page's source */
+    uint8_t rt_edit, rt_out;             /* THRU: a route's filter up (EDIT), its output */
     uint32_t route_ms[NTAPS][NOUTS];     /* when each route last passed something on */
     uint32_t routed[NTAPS];              /* messages each source passed on */
 } ui;
 
 #include "mon.c"
+static int rt_filtered(uint32_t src, uint32_t o);
 #include "view.c"
+
+/* the filter being edited by the keys: the display's (FILTER), or a route's (THRU, EDIT) */
+static int filter_up(void) { return ui.tab == TAB_FILTER || (ui.tab == TAB_THRU && ui.rt_edit); }
+static uint16_t *filter_types(void)
+{
+    return ui.tab == TAB_THRU ? &set.rt_types[ui.thru_row][ui.rt_out] : &set.types;
+}
+static uint16_t *filter_chans(void)
+{
+    return ui.tab == TAB_THRU ? &set.rt_chans[ui.thru_row][ui.rt_out] : &set.chans;
+}
 
 static const uint8_t SRC_BTN[NTAPS] = {B_FX, B_SEL, B_ENV, B_LFO};
 static const uint8_t WHITE_K[16] = PLAT_WHITE_KEYS, BLACK_K[11] = PLAT_BLACK_KEYS;
@@ -139,11 +154,18 @@ static struct {
     uint8_t n, b[3];
 } thru_sx[NTAPS];
 
-static uint32_t thru_to(uint32_t src)    /* TO_* of a source's routes, each marked as used now */
+#define RT_ALL_TYPES ((1u << NTY) - 1u)
+static int rt_filtered(uint32_t src, uint32_t o)   /* the route lets some messages by, not all */
+{
+    return set.rt_types[src][o] != RT_ALL_TYPES || set.rt_chans[src][o] != 0xFFFFu;
+}
+
+/* TO_* of a source's routes that let this message by (type TY_*, channel 0..15 or -1), each marked as used now */
+static uint32_t thru_to(uint32_t src, uint32_t type, int ch)
 {
     uint32_t o, to = 0, r = set.routes[src] & ~SRC_SELF[src];
     for (o = 0; o < NOUTS; o++)
-        if (r >> o & 1u) {
+        if ((r >> o & 1u) && (set.rt_types[src][o] >> type & 1u) && (ch < 0 || (set.rt_chans[src][o] >> ch & 1u))) {
             to |= OUT_TO[o];
             ui.route_ms[src][o] = plat_ms() | 1u;
         }
@@ -158,7 +180,7 @@ static void thru(uint32_t w)             /* each tap entry (mon_poll) */
     if (!set.thru)
         return;
     if (kind == TK_SX) {                 /* SysEx in USB-MIDI's packets: 3 bytes a packet, the last says how many */
-        if (!(set.routes[src] & ~SRC_SELF[src] & 1u << OUT_USB))
+        if (!(set.routes[src] & ~SRC_SELF[src] & 1u << OUT_USB) || !(set.rt_types[src][OUT_USB] >> TY_SYSEX & 1u))
             return;
         for (i = 0; i < n; i++) {
             uint32_t b = TAP_B(w, i), k;
@@ -184,8 +206,11 @@ static void thru(uint32_t w)             /* each tap entry (mon_poll) */
     if (kind != TK_MSG && kind != TK_RS)
         return;
     cin = b0 >= 0xF8u ? 0xFu : b0 < 0xF0u ? b0 >> 4 : n == 1u ? 5u : n;   /* system common: 1, 2, 3 bytes */
-    if (set.routes[src] & ~SRC_SELF[src])
-        plat_midi_send(cin | (w & 0xFFFFFFu) << 8, thru_to(src));
+    if (set.routes[src] & ~SRC_SELF[src]) {
+        uint32_t to = thru_to(src, ev_type(b0), b0 < 0xF0u ? (int)(b0 & 15u) : -1);
+        if (to)
+            plat_midi_send(cin | (w & 0xFFFFFFu) << 8, to);
+    }
 }
 
 /* -------------------------------------------------------------- audio --- */
@@ -218,6 +243,14 @@ static void settings_defaults(void)
     set.scan = 1;
     set.routes[TAP_TRS] = 1u << OUT_USB;      /* a keyboard on the jack to the computer */
     set.routes[TAP_BLE_DEV] = 1u << OUT_USB;  /* a Bluetooth device to the computer (as a WIDI does) */
+    {
+        uint32_t s, o;
+        for (s = 0; s < NTAPS; s++)
+            for (o = 0; o < NOUTS; o++) {       /* a route lets everything by, clock too */
+                set.rt_types[s][o] = (uint16_t)RT_ALL_TYPES;
+                set.rt_chans[s][o] = 0xFFFFu;
+            }
+    }
     filters_default();
 }
 
@@ -384,7 +417,10 @@ static void button(uint32_t k)
         }
         break;
     case B_EDIT:
-        if (ui.tab == TAB_FILTER) {
+        if (ui.tab == TAB_THRU) {        /* a route's filter, and back to the routes */
+            ui.rt_edit = !ui.rt_edit;
+            ui.redraw_all = 1;
+        } else if (ui.tab == TAB_FILTER) {
             set.types = (uint16_t)TYPES_DEFAULT;
             set.chans = 0xFFFFu;
             changed();
@@ -393,35 +429,36 @@ static void button(uint32_t k)
         break;
     case B_OCTDN:
     case B_OCTUP:
-        if (ui.tab == TAB_FILTER) {
-            set.types = k == B_OCTUP ? (uint16_t)((1u << NTY) - 1u) : 0u;
-            set.chans = k == B_OCTUP ? 0xFFFFu : 0u;
+        if (filter_up()) {               /* all through, or nothing */
+            *filter_types() = k == B_OCTUP ? (uint16_t)((1u << NTY) - 1u) : 0u;
+            *filter_chans() = k == B_OCTUP ? 0xFFFFu : 0u;
             changed();
-            app_say("FILTERS", k == B_OCTUP ? "ALL" : "NONE");
+            app_say("FILTER", k == B_OCTUP ? "ALL" : "NONE");
         }
         break;
     }
 }
 
-static void key(uint32_t k)              /* a key pressed: on the FILTER page, a channel or a message on / off */
+static void key(uint32_t k)              /* a key pressed: with a filter up, a channel or a message on / off */
 {
     uint32_t i;
-    if (ui.tab != TAB_FILTER || ui.ask)
+    uint16_t *types = filter_types(), *chans = filter_chans();
+    if (!filter_up() || ui.ask)
         return;
     for (i = 0; i < 16u; i++)
         if (WHITE_K[i] == k) {
             char t[4];
-            set.chans ^= (uint16_t)(1u << i);
+            *chans ^= (uint16_t)(1u << i);
             changed();
             s_dec(t, (int32_t)i + 1, 0);
-            app_say(set.chans >> i & 1u ? "SHOW CH" : "HIDE CH", t);
+            app_say(*chans >> i & 1u ? "CH ON" : "CH OFF", t);
             return;
         }
     for (i = 0; i < NTY; i++)
         if (BLACK_K[i] == k) {
-            set.types ^= (uint16_t)(1u << i);
+            *types ^= (uint16_t)(1u << i);
             changed();
-            app_say(set.types >> i & 1u ? "SHOW" : "HIDE", TY_NAME[i]);
+            app_say(*types >> i & 1u ? "ON" : "OFF", TY_NAME[i]);
             return;
         }
 }
@@ -465,9 +502,14 @@ static void input(void)
             ui.redraw_all = 1;
         }
         for (o = 0; o < NOUTS; o++)
-            if (plat_enc(OUT_ENC[o]) != 0 && !(SRC_SELF[ui.thru_row] >> o & 1u)) {
-                set.routes[ui.thru_row] ^= (uint8_t)(1u << o);
-                changed();
+            if (plat_enc(OUT_ENC[o]) != 0) {
+                if (ui.rt_edit) {        /* a filter up: the knob picks the output whose filter it is */
+                    ui.rt_out = (uint8_t)o;
+                    ui.redraw_all = 1;
+                } else if (!(SRC_SELF[ui.thru_row] >> o & 1u)) {
+                    set.routes[ui.thru_row] ^= (uint8_t)(1u << o);
+                    changed();
+                }
             }
         if (plat_enc(EN_K4) != 0) {
             set.thru = (uint8_t)!set.thru;
@@ -511,14 +553,15 @@ static void lights(void)
         else
             mb |= b;
     }
-    if (ui.tab == TAB_FILTER) {          /* the keys: the channels and messages shown */
+    if (filter_up()) {                   /* the keys: the channels and messages the filter lets by */
+        uint32_t types = *filter_types(), chans = *filter_chans();
         for (n = 0; n < 16u; n++)
-            if (set.chans >> n & 1u)
+            if (chans >> n & 1u)
                 bk |= 1u << WHITE_K[n];
             else
                 dk |= 1u << WHITE_K[n];
         for (n = 0; n < NTY; n++)
-            if (set.types >> n & 1u)
+            if (types >> n & 1u)
                 bk |= 1u << BLACK_K[n];
             else
                 dk |= 1u << BLACK_K[n];
@@ -670,6 +713,12 @@ int app_expect(const char *what, int *got)
         *got = set_dirty;
     else if (!strcmp(what, "thru"))
         *got = set.thru;
+    else if (!strncmp(what, "rt_types", 8))   /* rt_typesSO: the filter of source S to output O */
+        *got = set.rt_types[(what[8] - '0') % NTAPS][(what[9] - '0') % NOUTS];
+    else if (!strncmp(what, "rt_chans", 8))
+        *got = set.rt_chans[(what[8] - '0') % NTAPS][(what[9] - '0') % NOUTS];
+    else if (!strcmp(what, "rt_edit"))
+        *got = ui.rt_edit;
     else if (!strncmp(what, "route", 5))    /* routeN: source N's outputs (bit 0 USB, 1 BLE-P, 2 BLE-C) */
         *got = set.routes[atoi(what + 5) % NTAPS];
     else if (!strcmp(what, "thru_row"))
