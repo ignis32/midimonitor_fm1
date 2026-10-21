@@ -19,8 +19,9 @@
 #define NLINES (BODY_H / LINE_H)
 #define CW 6                           /* FONT_XS's advance */
 
-enum { TAB_LOG, TAB_FILTER, TAB_STATS, TAB_GLO, NTABS };
-static const char *const TAB_NAME[NTABS] = {"LOG", "FILTER", "STATS", "GLO"};
+enum { TAB_LOG, TAB_FILTER, TAB_STATS, TAB_THRU, TAB_GLO, NTABS };
+static const char *const TAB_NAME[NTABS] = {"LOG", "FILTER", "STATS", "THRU", "GLO"};
+static const char *const OUT_NAME[NOUTS] = {"USB", "BLE-P", "BLE-C"};
 static const char *const FMT_NAME[3] = {"HEX", "HUMAN", "BOTH"};
 static const char *const TIME_NAME[3] = {"+MS", "ABS", "NO T"};
 
@@ -48,7 +49,6 @@ static void text_inv(int32_t x, int32_t y, const felucca_font_t *f, const char *
 static void draw_header(void)
 {
     int32_t x = 4, i;
-    char t[16];
     cv_begin(240, HEAD_H, G_BG);
     cv_rect(0, HEAD_H - 3, 240, 1, G_MID);
     for (i = 0; i < NTABS; i++) {
@@ -64,15 +64,6 @@ static void draw_header(void)
             cv_text(x, 2, &FONT_S, TAB_NAME[i], G_DIM);
         }
         x += w + 12;
-    }
-    if (ui.paused)
-        text_inv(240 - 4 - text_w(&FONT_XS, "PAUSED"), 4, &FONT_XS, "PAUSED", (plat_ms() / 500u) & 1u ? G_HI : G_MID);
-    else if (ui.scroll) {
-        t[0] = '-';
-        s_dec(t + 1, (int32_t)ui.scroll, 0);
-        cv_text(240 - 4 - text_w(&FONT_XS, t), 4, &FONT_XS, t, G_HI);
-    } else {
-        cv_text(240 - 4 - text_w(&FONT_XS, "LIVE"), 4, &FONT_XS, "LIVE", G_DIM);
     }
     scanlines();
     cv_blit(0, 0);
@@ -96,12 +87,22 @@ static void draw_footer(void)
             cv_rect(x - 1, 12, text_w(&FONT_XS, SRC_NAME[s]) + 2, 1, G_DIM);
         x += text_w(&FONT_XS, SRC_NAME[s]) + CW;
     }
-    d = s_cat(t, FMT_NAME[set.fmt]);
-    *d++ = ' ';
-    d = s_cat(d, TIME_NAME[set.tmode]);
-    if (set.thru)
-        s_cat(d, " THRU");
-    cv_text(240 - 4 - text_w(&FONT_XS, t), 6, &FONT_XS, t, G_DIM);
+    if (ui.paused || ui.scroll) {      /* the view stopped: paused, or scrolled back so many lines */
+        if (ui.paused)
+            s_cat(t, "PAUSED");
+        else {
+            t[0] = '-';
+            s_dec(t + 1, (int32_t)ui.scroll, 0);
+        }
+        text_inv(240 - 4 - text_w(&FONT_XS, t), 6, &FONT_XS, t, G_HI);
+    } else {
+        d = s_cat(t, FMT_NAME[set.fmt]);
+        *d++ = ' ';
+        d = s_cat(d, TIME_NAME[set.tmode]);
+        if (set.thru)
+            s_cat(d, " THRU");
+        cv_text(240 - 4 - text_w(&FONT_XS, t), 6, &FONT_XS, t, G_DIM);
+    }
     scanlines();
     cv_blit(0, FOOT_Y);
 }
@@ -261,19 +262,62 @@ static int32_t draw_bt_state(int32_t y)
     return y + 14;
 }
 
+/* ------------------------------------------------------------------ THRU --- */
+static void draw_thru(void)
+{
+    static const char *const KNOB[NOUTS] = {"K1", "K2", "K3"};
+    uint32_t s, o, now = plat_ms();
+    int32_t y = 2, x0 = 4 + 7 * CW, cw = 7 * CW;
+    char t[24];
+    cv_text(4, y, &FONT_XS, "THRU", G_MID);
+    if (set.thru)
+        text_inv(4 + 6 * CW, y, &FONT_XS, "ON", G_HI);
+    else
+        cv_text(4 + 6 * CW, y, &FONT_XS, "OFF", G_DIM);
+    cv_text(4 + 12 * CW, y, &FONT_XS, "(K4)", G_DIM);
+    y += 20;
+    cv_text(4, y, &FONT_XS, "FROM", G_DIM);
+    for (o = 0; o < NOUTS; o++) {      /* the outputs across, each with its knob */
+        cv_text(x0 + (int32_t)o * cw, y - 8, &FONT_XS, KNOB[o], G_DIM);
+        cv_text(x0 + (int32_t)o * cw, y + 4, &FONT_XS, OUT_NAME[o], G_MID);
+    }
+    cv_text(x0 + 3 * cw, y + 4, &FONT_XS, "SENT", G_DIM);
+    y += 22;
+    for (s = 0; s < NTAPS; s++, y += 18) {   /* the sources down: SELECT picks one */
+        int row = s == ui.thru_row;
+        if (row)
+            cv_rect(0, y - 3, 240, 17, G_FAINT);
+        cv_text(4, y, &FONT_XS, SRC_NAME[s], row ? G_HI : G_MID);
+        for (o = 0; o < NOUTS; o++) {
+            int32_t x = x0 + (int32_t)o * cw + 6;
+            int on = set.routes[s] >> o & 1u, busy = set.thru && ui.route_ms[s][o] && now - ui.route_ms[s][o] < 100u;
+            if (SRC_SELF[s] >> o & 1u)
+                cv_text(x, y, &FONT_XS, " -", G_FAINT);
+            else if (busy && on)
+                text_inv(x, y, &FONT_XS, "[>]", G_GLOW);
+            else
+                cv_text(x, y, &FONT_XS, on ? "[X]" : "[ ]", on ? (set.thru ? G_HI : G_MID) : G_DIM);
+        }
+        s_dec(t, (int32_t)ui.routed[s], 6);
+        cv_text(x0 + 3 * cw - CW, y, &FONT_XS, t, G_DIM);
+    }
+    y += 10;
+    cv_text(4, y, &FONT_XS, "SELECT: SOURCE  K1-K3: ITS OUTPUTS", G_DIM);
+    cv_text(4, y + 14, &FONT_XS, "SYSEX GOES TO USB ONLY (FOR NOW)", G_FAINT);
+}
+
 /* ------------------------------------------------------------------- GLO --- */
 static void draw_glo(void)
 {
-    static const char *const LABEL[4] = {"K1 BLUETOOTH", "K2 DEVICE", "K3 THRU", "K4 NOTE 60"};
+    static const char *const LABEL[3] = {"K1 BLUETOOTH", "K2 DEVICE", "K3 NOTE 60"};
     char name[21];
-    const char *val[4];
+    const char *val[3];
     int32_t y = 2, i, n;
     val[0] = !FM1B_BLE ? "NOT BUILT" : set.ble_off ? "OFF" : "ON";
     val[1] = !FM1B_BLE_CENTRAL || set.ble_off ? "--" : btdev_busy() ? btdev_name() : btdev_count() ? "TURN TO PICK"
              : "SCANNING..";
-    val[2] = set.thru ? "ON  (ALL IN -> OUT)" : "OFF";
-    val[3] = set.midc == 3u ? "C3 (YAMAHA)" : "C4 (ROLAND)";
-    for (i = 0; i < 4; i++, y += 15) {
+    val[2] = set.midc == 3u ? "C3 (YAMAHA)" : "C4 (ROLAND)";
+    for (i = 0; i < 3; i++, y += 15) {
         cv_text(4, y, &FONT_XS, LABEL[i], G_MID);
         cv_text(4 + 14 * CW, y, &FONT_XS, val[i], G_HI);
     }
@@ -349,6 +393,8 @@ static void draw_body(void)
         draw_filter();
     else if (ui.tab == TAB_STATS)
         draw_stats();
+    else if (ui.tab == TAB_THRU)
+        draw_thru();
     else
         draw_glo();
     if (ui.ask) {                      /* a question: OCT- NO on the left, OCT+ YES on the right */

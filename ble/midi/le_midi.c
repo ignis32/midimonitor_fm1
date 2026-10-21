@@ -207,7 +207,7 @@ int ble_midi_connected(void) { return periph_ready() || mc_ready(); }
 int ble_midi_peripheral_connected(void) { return periph_ready(); }
 int ble_midi_peripheral_linked(void) { return con_handle != 0; }   /* listening or not yet */
 static u16 send_mtu = 20;                        /* ATT payload: 23 - 3 until the exchange says more */
-int ble_midi_send_many(const uint32_t *pkts, const uint16_t *ms, int n)
+int ble_midi_send_many(const uint32_t *pkts, const uint16_t *ms, int n, int to)   /* to: 1 the computer, 2 the device */
 {
     /* each message carries the millisecond it happened (ms[], 13 bits): a receiver that honours the
      * timestamps (CoreMIDI does) replays the original timing, however the radio bunched the packets.
@@ -217,17 +217,20 @@ int ble_midi_send_many(const uint32_t *pkts, const uint16_t *ms, int n)
     u32 len = 0, remain = 0, t0, tp;
     int i;
     static u32 remain_max;
-    if (!ble_midi_connected() || n <= 0)
+    int to_p = (to & 1) && periph_ready(), to_c = (to & 2) && mc_ready();
+    if (n <= 0)
         return 0;
+    if (!to_p && !to_c)
+        return n;                                /* no one there to take them: gone (they would hold the queue) */
     /* one notification in the stack at a time: the radio sends about one a connection interval, so
      * what piles up meanwhile goes together in the next one (with its own timestamps) instead of as a
      * queue of small ones that each wait for a slot */
 #if BLE_MIDI_CENTRAL
-    {   /* both links take it or neither (each has its own buffer in the multi-link stack) */
+    {   /* the links it goes to take it or none does (each has its own buffer in the multi-link stack) */
         u32 r1 = 0xFFFFFFFFu, r2 = 0xFFFFFFFFu;
-        if (periph_ready())
+        if (to_p)
             ble_op_multi_att_get_remain(con_handle, &r1);
-        if (mc_ready())
+        if (to_c)
             ble_op_multi_att_get_remain(mc_handle, &r2);
         remain = r1 < r2 ? r1 : r2;
     }
@@ -275,10 +278,10 @@ int ble_midi_send_many(const uint32_t *pkts, const uint16_t *ms, int n)
     }
     if (i == 0)
         return 0;
-    if (periph_ready() && SEND(con_handle, H_MIDI, buf, len, ATT_OP_AUTO_READ_CCC))
+    if (to_p && SEND(con_handle, H_MIDI, buf, len, ATT_OP_AUTO_READ_CCC))
         return 0;
 #if BLE_MIDI_CENTRAL
-    if (mc_ready())
+    if (to_c)
         SEND(mc_handle, mc_value, buf, len, ATT_OP_WRITE_WITHOUT_RESPOND);
 #endif
     return i;

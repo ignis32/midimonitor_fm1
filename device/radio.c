@@ -374,7 +374,7 @@ static void radio_stuck_check(void)               /* still starting after 3 s: s
 static volatile uint8_t ble_state;
 
 /* ---- MIDI both ways (ble/midi/le_midi.c); everything here runs in the main loop */
-extern int ble_midi_send_many(const uint32_t *pkts, const uint16_t *ms, int n);
+extern int ble_midi_send_many(const uint32_t *pkts, const uint16_t *ms, int n, int to);
 extern int ble_midi_connected(void);
 static uint32_t ble_rx_count, ble_tx_count;
 static uint8_t ble_conn;                          /* ble_midi_connected(), as of the last poll */
@@ -421,7 +421,7 @@ static void ble_midi_tap(uint32_t pkt)            /* main loop (locked) or the t
     uint16_t ms = (uint16_t)(fm1_ms & 0x1FFFu);
     if (ble_state != BLE_READY || !ble_conn)
         return;
-    if (((pkt >> 8) & 0xFFu) == 0xF8u) {
+    if (((pkt >> 8) & 0xFFu) == 0xF8u && (pkt >> 4 & 3u) == 3u) {   /* a clock for both links: its own queue */
         if (bc_w - bc_r < BCQ) {
             ble_clk_ms[bc_w % BCQ] = ms;
             RING_PUBLISH();
@@ -452,8 +452,11 @@ static void ble_midi_drain(void)                  /* main loop: what waits, as m
         ni = bo_r;
         while (n < 16u && (ni != nw || ci != cw)) {
             int take_clk = ci != cw && (ni == nw || ms_before(ble_clk_ms[ci % BCQ], ble_out_ms[ni % BQ]));
+            uint32_t dest = take_clk ? 3u : ble_out_q[ni % BQ] >> 4 & 3u;
+            if (n && dest != (pkts[0] >> 4 & 3u))
+                break;                            /* one notification goes to the same links: the rest next round */
             if (take_clk) {
-                pkts[n] = 0xFu | 0xF8u << 8;
+                pkts[n] = 0xFu | 0xF8u << 8 | 3u << 4;
                 ms[n] = ble_clk_ms[ci % BCQ];
                 is_clk[n++] = 1;
                 ci++;
@@ -466,7 +469,7 @@ static void ble_midi_drain(void)                  /* main loop: what waits, as m
         }
         if (!n)
             return;
-        sent = (uint32_t)ble_midi_send_many(pkts, ms, (int)n);
+        sent = (uint32_t)ble_midi_send_many(pkts, ms, (int)n, (int)(pkts[0] >> 4 & 3u));
         if (!sent)
             return;                               /* the stack is full: what did not go stays for the next poll */
         for (k = 0; k < sent; k++) {

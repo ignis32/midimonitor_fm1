@@ -246,8 +246,9 @@ void plat_midi_send(uint32_t pkt, uint32_t to)    /* the main loop's and the tic
         midi_out_event(pkt);
         midi_counted(PORT_USB, 1, pkt);
     }
-    if (to & TO_BLE) {
-        ble_midi_tap(pkt);
+    if (to & (TO_BLE | TO_BLE_P | TO_BLE_C)) {   /* which links, in the cable bits: 1 the computer, 2 the device */
+        uint32_t dest = to & TO_BLE ? 3u : (to & TO_BLE_P ? 1u : 0u) | (to & TO_BLE_C ? 2u : 0u);
+        ble_midi_tap((pkt & ~0xF0u) | dest << 4);
         midi_counted(PORT_BLE, 1, pkt);
     }
     if (!in_tick)

@@ -176,31 +176,13 @@ wait 50
 # GLO: the settings page (and back to where we were)
 tap GLO
 wait 50
-expect tab 3
-spin K4 1
+expect tab 4
+spin K3 1
 wait 20
 expect midc 3
-spin K4 1
+spin K3 1
 wait 20
 expect midc 4
-
-# thru: what comes in goes out to the outputs it did not come from
-out
-midi TRS 90 3C 64
-wait 20
-out
-spin K3 1
-wait 20
-expect thru 1
-midi TRS 90 3D 64
-wait 20
-expect_out USB 90 3D 64
-raw TRS F0 7D 01 02 03 F7
-wait 20
-out
-spin K3 1
-wait 20
-expect thru 0
 
 # Bluetooth: off and on again (K1 asks), then a device (K2 picks it and asks)
 spin K1 1
@@ -225,6 +207,60 @@ wait 600
 expect ble_dev 4
 shot glo_connected.png
 tap GLO
+wait 50
+expect tab 0
+
+# THRU: off by default with TRS -> USB and BLE-C -> USB set up; K4 turns it on
+turn PRESET 3
+wait 50
+expect tab 3
+expect route1 1
+expect route3 1
+out
+midi TRS 90 3C 64
+wait 20
+out
+spin K4 1
+wait 20
+expect thru 1
+midi TRS 90 3D 64
+wait 20
+expect_out USB 90 3D 64
+raw TRS F0 7D 01 02 03 F7
+wait 20
+out
+# one to many: USB to both Bluetooth links (the computer and the device), never back to USB
+expect thru_row 0
+spin K2 1
+spin K3 1
+wait 20
+expect route0 6
+spin K1 1
+wait 20
+expect route0 6
+ble connect
+wait 50
+midi USB B0 07 64
+wait 20
+expect_out BLE-P B0 07 64
+expect_out BLE-C B0 07 64
+shot thru.png
+# BLE-C on its own row: to BLE-P only
+spin SELECT 3
+wait 20
+expect thru_row 3
+spin K1 1
+spin K2 1
+wait 20
+expect route3 2
+out
+raw DEV 90 40 64
+wait 20
+expect_out BLE-P 90 40 64
+spin K4 1
+wait 20
+expect thru 0
+turn PRESET -3
 wait 50
 expect tab 0
 

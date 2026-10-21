@@ -244,9 +244,15 @@ int plat_midi_in(uint32_t *pkt, int *port)       /* the script's "midi" */
 }
 void plat_midi_send(uint32_t pkt, uint32_t to)
 {
-    to &= TO_USB | TO_BLE;
-    if ((to & TO_BLE) && !ble_conn && bdev_state != BLE_DEV_READY)   /* as the device: nothing queues for no one */
-        to &= ~TO_BLE;
+    if (to & TO_BLE)                            /* Bluetooth: both links, or the one asked for */
+        to |= TO_BLE_P | TO_BLE_C;
+    to &= TO_USB | TO_BLE_P | TO_BLE_C;
+    if (!ble_conn)                              /* as the device: nothing queues for no one */
+        to &= ~TO_BLE_P;
+    if (bdev_state != BLE_DEV_READY)
+        to &= ~TO_BLE_C;
+    if (to & (TO_BLE_P | TO_BLE_C))
+        to |= TO_BLE;
     if (!to)
         return;
     if (to & TO_USB)
@@ -263,8 +269,9 @@ void plat_midi_send(uint32_t pkt, uint32_t to)
         return;
     }
     if (midi_log)
-        fprintf(midi_log, "%u ms: %02X %02X %02X ->%s%s\n", now_ms, (pkt >> 8) & 0xFF, (pkt >> 16) & 0xFF,
-                (pkt >> 24) & 0xFF, to & TO_USB ? " USB" : "", to & TO_BLE ? " BLE" : "");
+        fprintf(midi_log, "%u ms: %02X %02X %02X ->%s%s%s\n", now_ms, (pkt >> 8) & 0xFF, (pkt >> 16) & 0xFF,
+                (pkt >> 24) & 0xFF, to & TO_USB ? " USB" : "", to & TO_BLE_P ? " BLE-P" : "",
+                to & TO_BLE_C ? " BLE-C" : "");
 }
 
 /* Bluetooth (FM1B_BLE): a stand-in for the stack, ready a second after the start, and its log */
@@ -1045,7 +1052,7 @@ static void host_tap_raw(int src, const uint8_t *b, uint32_t n)
 }
 static int expect_out(const char *port, uint32_t pkt)   /* this message went out to PORT since the last "out" */
 {
-    int p = find_name(PORT_N, NPORTS, port);
+    int p = !strcmp(port, "BLE-P") ? 3 : !strcmp(port, "BLE-C") ? 4 : find_name(PORT_N, NPORTS, port);   /* (TO_*) */
     uint32_t i;
     for (i = 0; p >= 0 && i < n_out; i++)
         if (((out_pkt[i] ^ pkt) & 0xFFFFFF00u) == 0 && (out_to[i] >> p & 1u)) {

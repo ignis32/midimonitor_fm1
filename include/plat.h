@@ -53,7 +53,9 @@ void plat_play_red(int red);
  * (in only: the FM-1 has no MIDI out jack) and Bluetooth (FM1B_BLE); out to USB and Bluetooth. */
 enum { PORT_USB, PORT_BLE, PORT_TRS, NPORTS };
 #define TO_USB (1u << PORT_USB)
-#define TO_BLE (1u << PORT_BLE)
+#define TO_BLE (1u << PORT_BLE)                /* Bluetooth: the computer and the device alike */
+#define TO_BLE_P (1u << 3)                     /* Bluetooth: only the computer connected to the FM-1 */
+#define TO_BLE_C (1u << 4)                     /* Bluetooth: only the device the FM-1 connected to */
 int plat_midi_in(uint32_t *pkt, int *port);   /* 1 = got one, from port PORT_* (port may be 0) */
 void plat_midi_send(uint32_t pkt, uint32_t to);   /* to: TO_USB | TO_BLE; main loop, the render or the tick */
 void plat_midi_out(uint32_t pkt);      /* plat_midi_send(pkt, TO_USB) */

@@ -5,7 +5,7 @@
  * platform: gfx.c and announce.c are in scope.
  *
  * The panel:
- *   PRESETS          the page: LOG, FILTER, STATS, GLO
+ *   PRESETS          the page: LOG, FILTER, STATS, THRU, GLO
  *   GLO              the settings page, and back
  *   SELECT           scroll the log back (the view stops; back to the end: live again)
  *   PLAY             pause / go on (the log keeps everything that comes meanwhile)
@@ -14,12 +14,18 @@
  *   HOME             clear the log (asks: OCT+ yes, OCT- no)
  *   SAVE             keep the settings (lit: changed)
  *   FILTER page      white keys the channels, black keys the messages; OCT- none, OCT+ all, EDIT the defaults
+ *   THRU page        SELECT a source; K1 K2 K3 its route to USB, BLE-P, BLE-C (any of them, not back to itself);
+ *                    K4 thru on / off (the routes kept)
  *   GLO page         K1 Bluetooth on / off (asks), K2 a Bluetooth device (scans while the page is up; turn: asks to
- *                    connect to the one picked, or to let the connected one go), K3 THRU, K4 C3 / C4 for note 60
+ *                    connect to the one picked, or to let the connected one go), K3 C3 / C4 for note 60
  * The lights: the source buttons flash with what comes in (dim: hidden); the keys light with the notes held (F3..G5,
  * OCT- / OCT+: some below / above); PLAY green on the beat of a clock coming in, red while paused or on an error. */
 
-#define SET_MAGIC 0x4D4F4E31u            /* "MON1": the settings record; another magic loads defaults */
+#define SET_MAGIC 0x4D4F4E32u            /* "MON2": the settings record; another magic loads defaults */
+/* thru's outputs, a bit each (settings_t routes) */
+enum { OUT_USB, OUT_BLE_P, OUT_BLE_C, NOUTS };
+static const uint32_t OUT_TO[NOUTS] = {TO_USB, TO_BLE_P, TO_BLE_C};
+static const uint8_t SRC_SELF[NTAPS] = {1u << OUT_USB, 0, 1u << OUT_BLE_P, 1u << OUT_BLE_C};   /* not back to itself */
 typedef struct {
     uint32_t magic;
     uint8_t fmt;                         /* 0 HEX, 1 HUMAN, 2 BOTH */
@@ -30,8 +36,9 @@ typedef struct {
     uint8_t ble_off;                     /* Bluetooth switched off (REC held) */
     uint16_t types;                      /* bit TY_*: the messages shown */
     uint16_t chans;                      /* bit c: channel c + 1 shown */
-    uint8_t thru;                        /* what comes in goes out again (thru()) */
-    uint8_t rsv[1];
+    uint8_t thru;                        /* thru on: what comes in goes out again by routes (thru()) */
+    uint8_t routes[NTAPS];               /* per source: bit OUT_* = it goes out there */
+    uint8_t rsv[3];
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -54,6 +61,9 @@ static struct {
     char msg[2][24];
     uint32_t msg_until;
     uint32_t keys, btn;
+    uint32_t thru_row;                   /* the THRU page's source */
+    uint32_t route_ms[NTAPS][NOUTS];     /* when each route last passed something on */
+    uint32_t routed[NTAPS];              /* messages each source passed on */
 } ui;
 
 #include "mon.c"
@@ -122,13 +132,25 @@ static void mon_event(const ev_t *e)     /* each event as it is logged (mon.c) *
 }
 
 /* --------------------------------------------------------------- thru --- */
-/* THRU on (GLO K3): each message out again as it comes, to the outputs it did not come from: USB to Bluetooth, the
- * jack to both, Bluetooth to USB (TO_BLE reaches the computer and the device alike: Bluetooth to Bluetooth would
- * echo). SysEx to USB only: the Bluetooth side sends no SysEx yet. Cut-off and stray bytes are not passed on */
-static const uint32_t THRU_TO[NTAPS] = {TO_BLE, TO_USB | TO_BLE, TO_USB, TO_USB};
+/* THRU (its page): each message out again as it comes, by its source's routes (one source to any of USB, BLE-P,
+ * BLE-C; never back to itself). SysEx to USB only: the Bluetooth side sends no SysEx yet. Cut-off and stray bytes
+ * are not passed on */
 static struct {
     uint8_t n, b[3];
 } thru_sx[NTAPS];
+
+static uint32_t thru_to(uint32_t src)    /* TO_* of a source's routes, each marked as used now */
+{
+    uint32_t o, to = 0, r = set.routes[src] & ~SRC_SELF[src];
+    for (o = 0; o < NOUTS; o++)
+        if (r >> o & 1u) {
+            to |= OUT_TO[o];
+            ui.route_ms[src][o] = plat_ms() | 1u;
+        }
+    if (to)
+        ui.routed[src]++;
+    return to;
+}
 
 static void thru(uint32_t w)             /* each tap entry (mon_poll) */
 {
@@ -136,7 +158,7 @@ static void thru(uint32_t w)             /* each tap entry (mon_poll) */
     if (!set.thru)
         return;
     if (kind == TK_SX) {                 /* SysEx in USB-MIDI's packets: 3 bytes a packet, the last says how many */
-        if (!(THRU_TO[src] & TO_USB))
+        if (!(set.routes[src] & ~SRC_SELF[src] & 1u << OUT_USB))
             return;
         for (i = 0; i < n; i++) {
             uint32_t b = TAP_B(w, i), k;
@@ -145,6 +167,10 @@ static void thru(uint32_t w)             /* each tap entry (mon_poll) */
             k = thru_sx[src].n++;
             thru_sx[src].b[k] = (uint8_t)b;
             if (b == 0xF7u || k == 2u) {
+                if (b == 0xF7u) {        /* a whole SysEx passed on: counted, lit */
+                    ui.route_ms[src][OUT_USB] = plat_ms() | 1u;
+                    ui.routed[src]++;
+                }
                 plat_midi_send((b == 0xF7u ? 5u + k : 4u) | (uint32_t)thru_sx[src].b[0] << 8 |
                                (k > 0u ? (uint32_t)thru_sx[src].b[1] << 16 : 0u) |
                                (k > 1u ? (uint32_t)thru_sx[src].b[2] << 24 : 0u), TO_USB);
@@ -158,7 +184,8 @@ static void thru(uint32_t w)             /* each tap entry (mon_poll) */
     if (kind != TK_MSG && kind != TK_RS)
         return;
     cin = b0 >= 0xF8u ? 0xFu : b0 < 0xF0u ? b0 >> 4 : n == 1u ? 5u : n;   /* system common: 1, 2, 3 bytes */
-    plat_midi_send(cin | (w & 0xFFFFFFu) << 8, THRU_TO[src]);
+    if (set.routes[src] & ~SRC_SELF[src])
+        plat_midi_send(cin | (w & 0xFFFFFFu) << 8, thru_to(src));
 }
 
 /* -------------------------------------------------------------- audio --- */
@@ -189,6 +216,8 @@ static void settings_defaults(void)
     set.fmt = 2;
     set.midc = 4;
     set.scan = 1;
+    set.routes[TAP_TRS] = 1u << OUT_USB;      /* a keyboard on the jack to the computer */
+    set.routes[TAP_BLE_DEV] = 1u << OUT_USB;  /* a Bluetooth device to the computer (as a WIDI does) */
     filters_default();
 }
 
@@ -400,7 +429,7 @@ static void key(uint32_t k)              /* a key pressed: on the FILTER page, a
 static void input(void)
 {
     uint32_t keys = plat_keys(), btn = plat_buttons(), k;
-    int32_t e;
+    int32_t e, sel;
     for (k = 0; k < NKEYS; k++)
         if ((keys >> k & 1u) && !(ui.keys >> k & 1u))
             key(k);
@@ -413,20 +442,37 @@ static void input(void)
         ui.tab = (uint32_t)((int32_t)ui.tab + (e > 0 ? 1 : -1) + NTABS) % NTABS;
         ui.redraw_all = 1;
     }
-    if ((e = plat_enc(EN_SELECT)) != 0 && ui.tab == TAB_LOG && !ui.ask)
-        scroll_by(-e);
+    sel = plat_enc(EN_SELECT);           /* (read once: the LOG scrolls with it, THRU picks a source) */
+    if (sel && ui.tab == TAB_LOG && !ui.ask)
+        scroll_by(-sel);
     if (ui.tab == TAB_GLO) {             /* the settings: Bluetooth, the device, note 60, the scanlines */
         if (plat_enc(EN_K1) != 0 && !ui.ask)
             glo_bt_knob();
         if ((e = plat_enc(EN_K2)) != 0 && (!ui.ask || ui.ask == ASK_CONNECT))
             glo_device_knob(e);
         if (plat_enc(EN_K3) != 0 && !ui.ask) {
-            set.thru = (uint8_t)!set.thru;
-            changed();
-        }
-        if (plat_enc(EN_K4) != 0 && !ui.ask) {
             set.midc = set.midc == 3u ? 4u : 3u;
             changed();
+        }
+        plat_enc(EN_K4);                 /* (free for now) */
+        return;
+    }
+    if (ui.tab == TAB_THRU) {            /* SELECT the source; K1 K2 K3 its route to USB, BLE-P, BLE-C; K4 thru on */
+        static const uint8_t OUT_ENC[NOUTS] = {EN_K1, EN_K2, EN_K3};
+        uint32_t o;
+        if (sel) {
+            ui.thru_row = (uint32_t)(((int32_t)ui.thru_row + sel % NTAPS + NTAPS) % NTAPS);
+            ui.redraw_all = 1;
+        }
+        for (o = 0; o < NOUTS; o++)
+            if (plat_enc(OUT_ENC[o]) != 0 && !(SRC_SELF[ui.thru_row] >> o & 1u)) {
+                set.routes[ui.thru_row] ^= (uint8_t)(1u << o);
+                changed();
+            }
+        if (plat_enc(EN_K4) != 0) {
+            set.thru = (uint8_t)!set.thru;
+            changed();
+            app_say("THRU", set.thru ? "ON" : "OFF");
         }
         return;
     }
@@ -555,7 +601,8 @@ void app_frame(void)
     for (s = 0; s < NTAPS; s++)
         sig |= (uint32_t)(ui.act[s] && now - ui.act[s] < 90u) << s;
     sig |= (uint32_t)set.srcs << 4 | (uint32_t)set.fmt << 8 | (uint32_t)set.tmode << 10 | set.midc << 12 |
-           (uint32_t)set.scan << 15 | (uint32_t)set.thru << 16;
+           (uint32_t)set.scan << 15 | (uint32_t)set.thru << 16 | (uint32_t)ui.paused << 17 |
+           (ui.scroll < 0x3FFFu ? ui.scroll : 0x3FFFu) << 18;
     if (ui.msg_until && now >= ui.msg_until) {
         ui.msg_until = 0;
         ui.redraw_all = 1;
@@ -564,6 +611,8 @@ void app_frame(void)
         last_slow = now;
         ui.redraw_all = 1;
     }
+    if (ui.tab == TAB_THRU && now - last_body >= 50u)   /* the routes' flashes */
+        ui.redraw_all = 1;
     if (ui.redraw_all || sig != foot_sig) {
         foot_sig = sig;
         draw_footer();
@@ -621,6 +670,10 @@ int app_expect(const char *what, int *got)
         *got = set_dirty;
     else if (!strcmp(what, "thru"))
         *got = set.thru;
+    else if (!strncmp(what, "route", 5))    /* routeN: source N's outputs (bit 0 USB, 1 BLE-P, 2 BLE-C) */
+        *got = set.routes[atoi(what + 5) % NTAPS];
+    else if (!strcmp(what, "thru_row"))
+        *got = (int)ui.thru_row;
     else if (!strcmp(what, "ble_off"))
         *got = set.ble_off;
     else
