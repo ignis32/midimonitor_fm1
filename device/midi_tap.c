@@ -1,4 +1,5 @@
-/* SPDX-License-Identifier: MPL-2.0 */
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (C) 2026 ignis32 */
 /* The MIDI tap: every MIDI byte that comes in, from each source, as it came, stamped with the millisecond it arrived
  * (plat.h plat_tap). plat_midi_in leaves out what an instrument does not need (SysEx, system common, active sensing,
  * reset, stray bytes); the tap keeps all of it, for a monitor. Part of the unity build on the device (before usb.c,

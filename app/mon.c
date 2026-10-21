@@ -1,4 +1,5 @@
-/* SPDX-License-Identifier: MPL-2.0 */
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (C) 2026 ignis32 */
 /* The log: every message in, from the MIDI tap (plat_tap), as events in a ring, SysEx assembled per source; and
  * each event as text, in hex and in words. Part of app.c. */
 

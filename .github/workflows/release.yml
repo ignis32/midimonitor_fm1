@@ -1,0 +1,34 @@
+# Releases are built on GitHub, not by hand: The Firmware Hub's shared workflow zvenson/fm1-build (at its reviewed
+# tag v1) checks out this commit, builds it with JieLi's toolchain and the AC79 SDK, runs the host tests, signs a
+# build attestation for the release files and, on a tag, publishes them as that tag's release. The hub then shows
+# "Built from source on GitHub" (https://thefirmwarehub.com/kb/#provenance). Check a file yourself with
+#   gh attestation verify midimon-X.Y.fwsc --repo ignis32/midimonitor_fm1 \
+#       --signer-workflow zvenson/fm1-build/.github/workflows/build.yml
+#   push a tag vX.Y (X.Y == the VERSION file)  -> build, test, attest, release
+#   workflow_dispatch                           -> build, test, attest only (no release)
+# Never add or replace a release file by hand: only the attested files get the hub's key.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  firmware:
+    uses: zvenson/fm1-build/.github/workflows/build.yml@v1
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    with:
+      sdk: true
+      build: |
+        set -euo pipefail
+        test "$(git -C "$AC79_SDK" rev-parse HEAD)" = d179b4484759423312073f5fbb232501aa491047
+        if [[ "$GITHUB_REF_TYPE" == tag ]]; then test "$GITHUB_REF_NAME" = "v$(sh build.sh version)"; fi
+        sh build.sh release
+      test: sh build.sh test
+      packages: app/build/midimon-*.fwsc

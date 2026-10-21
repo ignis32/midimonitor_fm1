@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 # MIDIMON's words for a screen reader (fm1-reader): the text on the screen <TAB> what to say.
-# url: https://example.invalid/midimon/words/
+# url: https://ignis32.github.io/midimonitor_fm1/words/
 MIDIMON	midi mon
 BLE-P	bluetooth from a computer
 BLE-C	bluetooth from a device

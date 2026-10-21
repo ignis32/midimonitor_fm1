@@ -12,6 +12,6 @@ usb_audio_in = false           # a MIDI device only on the computer: no USB audi
 usb_audio_out = false
 # the site (tools/make_site.py, tools/publish_site.sh)
 tagline = "a MIDI monitor, thru router and clock for the FM-1"
-repo = ""
+repo = "https://github.com/ignis32/midimonitor_fm1"
 licence = "MPL-2.0"
 credits = "Built on fm1-base by Charles Vestal and felucca-bsp."

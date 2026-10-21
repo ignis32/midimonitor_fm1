@@ -1,4 +1,5 @@
-/* SPDX-License-Identifier: MPL-2.0 */
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (C) 2026 ignis32 */
 /* The screens, in a green phosphor terminal's look: the tabs (header), the page (body: LOG, FILTER, STATS) and the
  * sources (footer). Part of app.c, after mon.c. */
 

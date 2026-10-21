@@ -1,4 +1,5 @@
-/* SPDX-License-Identifier: MPL-2.0 */
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (C) 2026 ignis32 (from fm1-base's template, Copyright (C) 2026 Charles Vestal) */
 /* MIDIMON: the app's half of the contract with the platform (device/unity.c, host/plat_host.c). */
 #pragma once
 #include <stdint.h>

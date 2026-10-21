@@ -1,4 +1,5 @@
-/* SPDX-License-Identifier: MPL-2.0 */
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (C) 2026 ignis32 (from fm1-base's template, Copyright (C) 2026 Charles Vestal) */
 /* MIDIMON: a MIDI monitor. Every message from USB, the TRS jack and Bluetooth (a computer connected to the FM-1, and
  * the device the FM-1 connected to) in a log on the screen, in hex, in words or both, filtered by source, message
  * and channel; the lights show what comes in. Part of the unity build (device/unity.c, host/plat_host.c), after the
