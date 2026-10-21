@@ -93,13 +93,12 @@ static void draw_footer(void)
         else
             cv_text(x, 6, &FONT_XS, SRC_NAME[s], shown ? G_MID : G_FAINT);
         if (!shown)
-            cv_rect(x - 1, 12, 3 * CW + 2, 1, G_DIM);
-        x += 4 * CW;
+            cv_rect(x - 1, 12, text_w(&FONT_XS, SRC_NAME[s]) + 2, 1, G_DIM);
+        x += text_w(&FONT_XS, SRC_NAME[s]) + CW;
     }
     d = s_cat(t, FMT_NAME[set.fmt]);
     *d++ = ' ';
     d = s_cat(d, TIME_NAME[set.tmode]);
-    d = s_cat(d, set.midc == 3 ? " C3" : " C4");
     if (set.thru)
         s_cat(d, " THRU");
     cv_text(240 - 4 - text_w(&FONT_XS, t), 6, &FONT_XS, t, G_DIM);
@@ -157,15 +156,15 @@ static void draw_line(int32_t y, const ev_t *e, const ev_t *prev)
         if (prev) {
             uint32_t dt = e->ms - prev->ms;
             t[0] = '+';
-            if (dt > 99999u)
-                s_cat(t + 1, ">99s");
+            if (dt > 9999u)
+                s_cat(t, ">10s");
             else
-                s_dec(t + 1, (int32_t)dt, 5);
+                s_dec(t + 1, (int32_t)dt, 4);
         } else {
-            s_cat(t, "      ");
+            s_cat(t, "     ");
         }
         cv_text(x, y, &FONT_XS, t, err ? G_BG : G_DIM);
-        x += 7 * CW;
+        x += 6 * CW;
     } else if (set.tmode == 1) {       /* seconds since power-on, the last 1000 */
         d = s_dec(t, (int32_t)(e->ms / 1000u % 1000u), 3);
         *d++ = '.';
@@ -177,7 +176,7 @@ static void draw_line(int32_t y, const ev_t *e, const ev_t *prev)
         x += 8 * CW;
     }
     cv_text(x, y, &FONT_XS, SRC_NAME[e->src], err ? G_BG : G_MID);
-    x += 4 * CW;
+    x += 6 * CW;
     if (set.fmt != 1) {                /* the bytes; a running status's own byte (not on the wire) dim */
         int max = set.fmt == 2 ? 8 : (240 - x) / CW;
         ev_hex(e, t, max);
@@ -239,7 +238,7 @@ static void draw_filter(void)
         cv_text(x, y, &FONT_XS, on ? "[X]" : "[ ]", on ? G_HI : G_DIM);
         cv_text(x + 4 * CW, y, &FONT_XS, TY_NAME[i], on ? G_HI : G_DIM);
     }
-    cv_text(4, 164, &FONT_XS, "SOURCES  FX USB SEL TRS ENV BLE LFO DEV", G_DIM);
+    cv_text(4, 164, &FONT_XS, "FX USB  SEL TRS  ENV BLE-P  LFO BLE-C", G_DIM);
     cv_text(4, 178, &FONT_XS, "OCT- NONE  OCT+ ALL  EDIT DEFAULTS", G_DIM);
 }
 
@@ -306,11 +305,12 @@ static void draw_stats(void)
     uint32_t s;
     char t[48], *d;
     int32_t y = 2;
-    cv_text(4, y, &FONT_XS, "SRC   EVENTS   /S   BYTES  LOST", G_MID);
+    cv_text(4, y, &FONT_XS, "SRC    EVENTS   /S   BYTES  LOST", G_MID);
     for (s = 0; s < NTAPS; s++) {
         y += 14;
         d = s_cat(t, SRC_NAME[s]);
-        d = s_dec(d, (int32_t)src_events[s], 9);
+        d = s_pad(d, t, 5);
+        d = s_dec(d, (int32_t)src_events[s], 8);
         d = s_dec(d, (int32_t)ui.rate[s], 5);
         d = s_dec(d, (int32_t)plat_tap_bytes((int)s), 8);
         s_dec(d, (int32_t)src_lost_seen[s], 6);

@@ -7,7 +7,8 @@ enum { EV_MSG, EV_RS, EV_SYSEX, EV_SXCUT, EV_CUT, EV_STRAY, EV_LOST };
 enum { TY_NOTE, TY_PAT, TY_CC, TY_PC, TY_CAT, TY_PB, TY_SYSEX, TY_CLOCK, TY_TRANSPORT, TY_ACTIVE, TY_SYS, NTY, TY_ERR = NTY };
 static const char *const TY_NAME[NTY] = {"NOTE", "POLY AT", "CC", "PROGRAM", "CH AT", "BEND", "SYSEX", "CLOCK",
                                          "TRANSPORT", "ACT SENSE", "SYSTEM"};
-static const char *const SRC_NAME[NTAPS] = {"USB", "TRS", "BLE", "DEV"};
+/* Bluetooth by the FM-1's role: BLE-P a computer connected to it (peripheral), BLE-C a device it connected to (central) */
+static const char *const SRC_NAME[NTAPS] = {"USB", "TRS", "BLE-P", "BLE-C"};
 
 typedef struct {
     uint32_t ms;                       /* when it came (plat_ms) */
@@ -321,15 +322,12 @@ static int ev_human(const ev_t *e, char *d, int midc)
     case EV_SYSEX:
     case EV_SXCUT:
         d = s_cat(d, e->kind == EV_SYSEX ? "SYSEX " : "SYSEX CUT ");
-        if (*maker_name(e)) {
-            d = s_cat(d, maker_name(e));
-            *d++ = ' ';
-        } else if (e->sxk >= 2u) {
-            d = s_hex2(d, e->b[0]);
-            *d++ = ' ';
-        }
-        d = s_dec(d, e->sxn, 0);
-        s_cat(d, "B");
+        d = s_dec(d, e->sxn, 0);       /* the length first: a narrow line cuts the maker's name, not it */
+        d = s_cat(d, "B ");
+        if (*maker_name(e))
+            s_cat(d, maker_name(e));
+        else if (e->sxk >= 2u)
+            s_hex2(d, e->b[0]);
         return 0;
     case EV_CUT:
         s_cat(d, "CUT SHORT");

@@ -2,5 +2,6 @@
 # MIDIMON's words for a screen reader (fm1-reader): the text on the screen <TAB> what to say.
 # url: https://example.invalid/midimon/words/
 MIDIMON	midi mon
-DEV	device
+BLE-P	bluetooth from a computer
+BLE-C	bluetooth from a device
 TRS	T R S jack
