@@ -14,9 +14,10 @@
 int mon_ble_off(void);
 
 /* the store: the app's objects, the panel calibration (the platform's) and Bluetooth's address and pairing among
- * them, and their flash offsets */
+ * them, and their flash offsets. All in the data area, which stock V15 wipes: the settings sectors at 0xFC000
+ * (which V15 keeps) hold another firmware's settings, and MIDIMON leaves them alone */
 enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_BLE, OBJ_NOBJ };
-#define APP_STORE_MAP {0xFC000u, 0xDC000u, 0xDE000u}
+#define APP_STORE_MAP {0xDA000u, 0xDC000u, 0xDE000u}
 
 /* the contract: the platform calls these */
 void app_init(void);                     /* boot: the saved settings (or defaults) */
