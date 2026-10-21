@@ -127,6 +127,7 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
 #include "touch.h"                     /* velocity and pressure from the keys (lib/touch.c) */
 #endif
 #include "fm1b_config.h"
+#include "midi_tap.c"                  /* every MIDI byte in, as it came (plat_tap): the scripts' "midi" and "raw" */
 static const uint8_t HOST_WHITE_K[16] = PLAT_WHITE_KEYS, HOST_BLACK_K[11] = PLAT_BLACK_KEYS;
 /* "spin": encoder steps exactly as given; an app that accelerates its knobs reads this (#ifdef PLAT_HOST) */
 static uint8_t plat_host_exact;
@@ -989,6 +990,59 @@ static uint32_t mk_pkt(const char *a, const char *b, const char *c)
     return cin | st << 8 | d1 << 16 | d2 << 24;
 }
 static const char *const PORT_N[NPORTS] = {"USB", "BLE", "TRS"};
+static const char *const TAP_N[NTAPS] = {"USB", "TRS", "BLE", "DEV"};   /* "raw": BLE the computer, DEV the device */
+
+/* bytes into the tap as their source carries them: USB as a host packs them (USB-MIDI event packets), the jack as
+ * they are, Bluetooth in one packet (a timestamp before each status byte) */
+static void host_tap_raw(int src, const uint8_t *b, uint32_t n)
+{
+    uint32_t i = 0;
+    if (src == TAP_TRS) {
+        for (; i < n; i++)
+            tap_byte(&tap_trs, TAP_TRS, b[i], now_ms);
+    } else if (src == TAP_USB) {
+        while (i < n) {
+            uint32_t st = b[i], k = 1, pkt;
+            if (st == 0xF0u) {         /* SysEx: 3 bytes a packet, the last one says how many it holds */
+                for (;;) {
+                    uint32_t m = 0, end = 0, v[3] = {0, 0, 0};
+                    while (m < 3u && i < n) {
+                        v[m] = b[i++];
+                        end = v[m++] == 0xF7u;
+                        if (end)
+                            break;
+                    }
+                    pkt = (end || i >= n ? 4u + m : 4u) | v[0] << 8 | v[1] << 16 | v[2] << 24;
+                    if (end && m == 3u)
+                        pkt = (pkt & ~15u) | 7u;
+                    tap_usb(pkt, now_ms);
+                    if (end || i >= n)
+                        break;
+                }
+                continue;
+            }
+            k = st >= 0x80u ? 1u + tap_need(st) : 1u;
+            pkt = st >= 0xF8u || st < 0x80u ? 0xFu : st >= 0xF0u ? (k == 1u ? 5u : k) : st >> 4;
+            pkt |= st << 8;
+            if (k > 1u && i + 1u < n)
+                pkt |= (uint32_t)b[i + 1] << 16;
+            if (k > 2u && i + 2u < n)
+                pkt |= (uint32_t)b[i + 2] << 24;
+            tap_usb(pkt, now_ms);
+            i += k;
+        }
+    } else {
+        uint8_t p[512];
+        uint32_t m = 0;
+        p[m++] = 0x80u;
+        for (; i < n && m + 2u < sizeof p; i++) {
+            if (b[i] & 0x80u)
+                p[m++] = 0x80u;        /* the timestamp's low byte */
+            p[m++] = b[i];
+        }
+        tap_ble_packet(p, m, src == TAP_BLE_DEV, now_ms);
+    }
+}
 static int expect_out(const char *port, uint32_t pkt)   /* this message went out to PORT since the last "out" */
 {
     int p = find_name(PORT_N, NPORTS, port);
@@ -1284,8 +1338,30 @@ int main(int argc, char **argv)
             run_ms(40);                         /* as the device's smoothing settles */
         } else if (!strcmp(cmd, "midi")) {
             int p = find_name(PORT_N, NPORTS, a);
-            min_q[mi_w % MQ] = p < 0 ? mk_pkt(a, b, c) : mk_pkt(b, c, d);
+            uint32_t pkt = p < 0 ? mk_pkt(a, b, c) : mk_pkt(b, c, d), st = pkt >> 8 & 0xFFu;
+            uint8_t raw[3] = {(uint8_t)st, (uint8_t)(pkt >> 16), (uint8_t)(pkt >> 24)};
+            min_q[mi_w % MQ] = pkt;
             min_port[mi_w++ % MQ] = p < 0 ? PORT_USB : (uint32_t)p;
+            host_tap_raw(p == PORT_TRS ? TAP_TRS : p == PORT_BLE ? TAP_BLE_HOST : TAP_USB, raw, 1u + tap_need(st));
+            run_ms(2);
+        } else if (!strcmp(cmd, "raw")) {             /* raw [SRC] HEX..: bytes as they come (SRC: USB TRS BLE DEV) */
+            uint8_t bytes[256];
+            uint32_t n = 0;
+            int s = find_name(TAP_N, NTAPS, a);
+            const char *q = plat_host_line + 3;
+            while (*q == ' ')
+                q++;
+            if (s >= 0)
+                q += strlen(a);
+            for (;;) {
+                char *e;
+                unsigned long v = strtoul(q, &e, 16);
+                if (e == q || n >= sizeof bytes)
+                    break;
+                bytes[n++] = (uint8_t)v;
+                q = e;
+            }
+            host_tap_raw(s < 0 ? TAP_USB : s, bytes, n);
             run_ms(2);
         } else if (!strcmp(cmd, "ble")) {
             if (!strcmp(a, "connect") && ble_state == BLE_READY) {
@@ -1413,6 +1489,7 @@ int main(int argc, char **argv)
             for (; n > 0; n--) {
                 min_port[mi_w % MQ] = PORT_USB;
                 min_q[mi_w++ % MQ] = 0x0Fu | 0xF8u << 8;
+                tap_usb(0x0Fu | 0xF8u << 8, now_ms);
                 run_ms((uint32_t)gap);
             }
 #if FM1B_MIRROR

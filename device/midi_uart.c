@@ -35,6 +35,7 @@ static uint32_t um_len(uint32_t s) { return (s & 0xE0u) == 0xC0u ? 1u : 2u; }   
 
 static void um_byte(uint32_t b)
 {
+    tap_byte(&tap_trs, TAP_TRS, b, fm1_ms);       /* the monitor's copy, all of it (device/midi_tap.c) */
     if (b >= 0xF8u) {                              /* real time: any time, keeps running status */
         if (b == 0xF8u || b == 0xFAu || b == 0xFBu || b == 0xFCu) {
             if (um_put(0xFu | b << 8))
@@ -73,6 +74,8 @@ static void uart_midi_take(uint32_t n)
     um.pend += n;
     if (um.pend > UM_RING) {                       /* the DMA lapped us: wait for a whole new status */
         um.drops += um.pend - UM_RING;
+        tap_drop[TAP_TRS] += um.pend - UM_RING;    /* (bytes, not entries: the monitor shows a loss either way) */
+        tap_trs = (tap_parser_t){0};
         um.rd = (um.rd + um.pend - UM_RING) & (UM_RING - 1u);
         um.pend = UM_RING;
         um.st = um.got = um.sysex = 0;

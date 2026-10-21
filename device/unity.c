@@ -99,6 +99,7 @@ static volatile uint32_t fm1_ms;  /* milliseconds since boot (TIMER4-based, TIME
 #endif
 #define FELUCCA_MIRROR FM1B_MIRROR /* usb.c's ring for mirror.c's frames */
 #define SXQ 128u                  /* the SysEx send ring, in packets: a whole screen-reader SAY (ANN_MAX + 9 bytes) */
+#include "midi_tap.c"             /* every MIDI byte in, as it came (plat_tap): fed by usb.c, midi_uart.c, radio.c */
 #include "usb.c"
 #ifndef FM1B_TRS
 #define FM1B_TRS 1

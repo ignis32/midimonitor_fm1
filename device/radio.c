@@ -389,6 +389,12 @@ void ble_midi_receive(uint32_t pkt)               /* from the stack (in ble_poll
         ble_rx_count++;
     }
 }
+void ble_midi_raw(const uint8_t *b, uint16_t len, int dev)   /* from the stack (in ble_poll): the MIDI tap's copy */
+{
+    uint32_t f = plat_lock();                     /* TIMER5 feeds the tap too (USB, the jack) */
+    tap_ble_packet(b, len, dev, fm1_ms);
+    plat_unlock(f);
+}
 static int ble_midi_in(uint32_t *pkt)
 {
     if (bi_r == bi_w)

@@ -5,8 +5,11 @@ usb_manufacturer = "fm1-midimonitor"
 usb_product = "MIDIMON FM-1"
 o2 = []                        # separate units compiled at -O2
 words = "words.tsv"
-ble = true                     # Bluetooth MIDI (--no-ble builds without it)
+fontset = "terminus"           # the terminal look: Terminus bitmap fonts (assets/fonts)
+ble = true                    # Bluetooth MIDI (--no-ble builds without it)
 ble_central = true             # and the FM-1 connects to Bluetooth MIDI devices too
+usb_audio_in = false           # a MIDI device only on the computer: no USB audio either way
+usb_audio_out = false
 # the site (tools/make_site.py, tools/publish_site.sh)
 tagline = "a MIDI monitor, thru router and clock for the FM-1"
 repo = ""

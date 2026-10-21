@@ -225,6 +225,8 @@ def generate():
     for c in [[tools / "gen_font.py", GEN / "felucca_font.h"],
               [tools / "gen_words.py", APP / CONF.get("words", "words.tsv"), APP / "web" / "words", GEN / "ann_words.h"]]:
         env = {**os.environ, "FM1_FONT_FULL": " ".join(CONF.get("font_full", []))}
+        if CONF.get("fontset"):               # fm1.toml fontset = "terminus": tools/gen_font.py's set (default barlow)
+            env["X0X_FONTSET"] = CONF["fontset"]
         r = subprocess.run([sys.executable, *map(str, c)], capture_output=True, text=True, env=env)
         sys.stdout.write(r.stdout)
         if r.returncode:

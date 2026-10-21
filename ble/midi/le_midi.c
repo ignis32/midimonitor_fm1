@@ -46,6 +46,7 @@ const char log_tag_const_i_BLE_MIDI = 1;           /* the SDK keeps these in log
 #define BLE_MIDI_CENTRAL 0
 #endif
 extern void ble_midi_receive(uint32_t pkt);
+extern void ble_midi_raw(const u8 *b, u16 len, int dev);   /* the whole packet, for the MIDI tap (radio.c) */
 extern uint32_t shim_ms(void);
 
 /* ---- the GATT database (the SDK's binary form: size, flags, handle, uuid, value). Flags: bit 1 read,
@@ -157,10 +158,11 @@ static u8 cin_of(u8 st, int n)
     if (st < 0xF0) return st >> 4;
     return n == 2 ? 3 : n == 1 ? 2 : 5;          /* system common */
 }
-static void midi_parse(const u8 *b, u16 len)
+static void midi_parse(const u8 *b, u16 len, int dev)   /* dev: from the device we connected to */
 {
     u16 i = 1;
     u8 st = 0;
+    ble_midi_raw(b, len, dev);
     while (i < len) {
         if (b[i] & 0x80) {                       /* a timestamp low byte, then maybe a status */
             i++;
@@ -320,7 +322,7 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
         break;
     case H_MIDI:
         if (buffer_size >= 2)
-            midi_parse(buffer, buffer_size);
+            midi_parse(buffer, buffer_size, 0);
         break;
     }
     return 0;
@@ -489,7 +491,7 @@ void user_client_report_data_callback(att_data_report_t *d)   /* notifications f
 {
     if (d->conn_handle == mc_handle && d->value_handle == mc_value && d->packet_type == GATT_EVENT_NOTIFICATION &&
         d->blob_length >= 2)
-        midi_parse(d->blob, d->blob_length);
+        midi_parse(d->blob, d->blob_length, 1);
 }
 int l2cap_connection_update_request_just(u8 *packet, hci_con_handle_t handle) { (void)packet; (void)handle; return 0; }
 

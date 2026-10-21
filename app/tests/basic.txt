@@ -1,112 +1,208 @@
-# The template in the host simulator: tools/build.py template --host, then
-#   template/build/host/template_host template/tests/basic.txt template/build/host
+# MIDIMON in the host simulator: python3 tools/build.py app --host, then
+#   app/build/host/midimon_host app/tests/basic.txt app/build/host
+# (expect last_kind: 0 MSG 1 RS 2 SYSEX 3 SYSEX CUT 4 CUT 5 STRAY 6 LOST; last_type: 0 NOTE .. 6 SYSEX 7 CLOCK
+#  8 TRANSPORT 9 ACT SENSE 10 SYSTEM 11 ERROR; last_src: 0 USB 1 TRS 2 BLE 3 DEV)
 wait 600
 shot boot.png
-key 7 down
+expect events 0
+expect lines 0
+
+# one of each source
+midi USB 90 3C 64
+wait 20
+expect events 1
+expect last_src 0
+expect last_type 0
+expect held 1
+midi TRS 80 3C 40
+wait 20
+expect last_src 1
+expect held 0
+raw BLE B0 07 64
+wait 20
+expect last_src 2
+expect last_type 2
+raw DEV E0 00 40
+wait 20
+expect last_src 3
+expect last_type 5
+expect events 4
+
+# the jack: running status, a stray byte, a message cut short
+raw TRS 90 3C 64 3E 64
+wait 20
+expect events 6
+expect last_kind 1
+expect last_b0 144
+expect last_b1 62
+raw TRS F6 3C
+wait 20
+expect last_kind 5
+expect last_type 11
+raw TRS 90 3C 90 40 64
+wait 20
+expect events 10
+expect last_kind 0
+expect last_b1 64
+
+# SysEx: whole over each source, cut off, a clock inside one
+raw TRS F0 7E 7F 06 01 F7
+wait 20
+expect last_kind 2
+expect last_type 6
+expect last_sxn 6
+expect last_b0 126
+raw USB F0 41 10 42 12 40 00 7F 00 41 F7
+wait 20
+expect last_kind 2
+expect last_src 0
+expect last_sxn 11
+expect last_b0 65
+raw BLE F0 43 10 4C 00 F7
+wait 20
+expect last_src 2
+expect last_sxn 6
+raw DEV F0 00 20 29 02 F7
+wait 20
+expect last_src 3
+expect last_b2 41
+raw TRS F0 01 02 90 3C 64
+wait 20
+expect events 16
+expect last_kind 0
+raw TRS F0 7D 01 F8 02 F7
+wait 20
+expect events 18
+expect last_kind 2
+expect last_sxn 5
+raw TRS F2 10 00 F3 05 F6 FE FF
+wait 20
+expect events 23
+expect last_b0 255
+shot log_both.png
+
+# clock in: its tempo (21 ms a tick: 119 bpm), hidden from the log by default
+clock 48 21
+wait 20
+expect bpm10 >1180
+expect bpm10 <1200
+expect lines 16
+raw USB FA
+wait 20
+expect last_type 8
+turn PRESET 2
 wait 50
-expect note 60
-expect midi_out 1
-shot key.png
-key 7 up
+expect tab 2
+shot stats.png
+turn PRESET -2
 wait 50
-expect note -1
-tap OCT+
-wait 30
-expect octave 1
-expect dirty 1
+expect tab 0
+
+# the formats and times (K1, K2), note 60 (K3)
+spin K1 1
+wait 50
+expect fmt 0
+shot log_hex.png
+spin K1 1
+wait 50
+expect fmt 1
+spin K2 1
+wait 50
+shot log_human_abs.png
+spin K2 2
+spin K1 1
+wait 50
+expect fmt 2
+spin K3 1
+wait 20
+expect midc 3
+spin K3 1
+wait 20
+expect midc 4
+
+# pause: the view stays, the log goes on
+tap PLAY
+wait 20
+expect paused 1
+midi USB 90 40 64
+midi USB 80 40 00
+wait 20
+expect events 74
+shot paused.png
+tap PLAY
+wait 20
+expect paused 0
+expect scroll 0
+
+# scroll back: the view stops; forward to the end: live again
+spin SELECT -5
+wait 50
+expect scroll 5
+midi USB 90 41 64
+wait 20
+expect scroll 5
+spin SELECT 5
+wait 50
+expect scroll 0
+
+# hide a source (FX: USB), then show it again
+tap FX
+wait 20
+expect srcs 14
+tap FX
+wait 20
+expect srcs 15
+
+# the FILTER page: white keys the channels, black keys the messages
 turn PRESET 1
-wait 30
-expect wave 1
-turn K3 3
-wait 300
-expect turns5 3
-press FX
-wait 30
-shot controls.png
-release FX
+wait 50
+expect tab 1
+key w0 down
+wait 20
+key w0 up
+wait 20
+expect chans 65534
+key b0 down
+wait 20
+key b0 up
+wait 20
+expect types 1406
+shot filter.png
+tap OCT-
+wait 20
+expect types 0
+expect chans 0
+tap EDIT
+wait 20
+expect types 1407
+expect chans 65535
+turn PRESET -1
+wait 50
+
+# clear the log: HOME asks, OCT- no, OCT+ yes
+tap HOME
+wait 20
+expect ask 1
+shot ask.png
+tap OCT-
+wait 20
+expect ask 0
+expect events >50
+tap HOME
+wait 20
+tap OCT+
+wait 20
+expect ask 0
+expect events 0
+
+# the settings kept across a power cycle
+spin K1 1
+wait 20
+expect fmt 0
+expect dirty 1
 tap SAVE
 wait 30
 expect dirty 0
-expect store_writes 1
 reboot
 wait 600
-expect octave 1
-expect wave 1
-midi 90 3C 64
-wait 30
-expect note 60
-wav note.wav
-wait 200
-wavstop
-expect peak_db_min -30
-midi 80 3C 00
-listen
-wait 100
-said MIDIMON. OCTAVE +1. WAVE TRIANGLE
-tap ARP
-wait 30
-said BUTTON ARP
-# MASTER turned while a note plays: the gain glides, so no sample jumps further than the wave itself does
-midi 90 45 64
-wait 100
-wav master.wav
-master 4096
-wait 20
-master 300
-wait 20
-master 4096
-wait 50
-wavstop
-midi 80 45 00
-# velocity and pressure (lib/touch.c): a key landing at 40 plays at about 40; pressed 80 % more, it has pressure
-key 7 down 40
-wait 60
-expect vel >30
-expect vel <50
-key 7 up
-wait 50
-key 7 down 100 80
-wait 600
-expect prs >40
-shot touch.png
-key 7 up
-wait 50
-# REC held a second: Bluetooth off (and saved: off after a restart too), then on again
-listen
-wait 1200
-press REC
-wait 1100
-release REC
-wait 50
-said BLUETOOTH OFF
-expect ble 0
-tap SAVE
-wait 30
-reboot
-wait 1200
-expect ble 0
-press REC
-wait 1100
-release REC
-wait 1200
-said BLUETOOTH ON
-expect ble 2
-# REC: look for Bluetooth MIDI devices, connect to the one found, let it go (lib/btdev)
-tap REC
-said BLE SCANNING
-wait 700
-said DEVICE BLE MIDI
-tap REC
-said CONNECTING BLE MIDI
-wait 500
-said DEVICE CONNECTED
-expect ble_dev 4
-tap REC
-said BLE DISCONNECTED
-wait 100
-expect ble_dev 0
-unsaid LOST
-# each port's messages counted (plat_midi_count): this is the fifth from USB in this script
-midi USB 90 40 50
-wait 20
-expect midi_in_usb 5
+expect fmt 0

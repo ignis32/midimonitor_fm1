@@ -65,6 +65,26 @@ uint32_t plat_midi_out_link(void);     /* a number that changes at each new USB 
 uint32_t plat_midi_count(int port, int out);   /* messages through port PORT_* since the start (out: sent), real-time (clock...) left out */
 uint32_t plat_midi_ago(int port, int out);     /* ms since the last one (0xFFFFFFFF: none yet) */
 
+/* The MIDI tap (device/midi_tap.c): every MIDI byte in, from each source, as it came (SysEx, system common, active
+ * sensing, reset and stray bytes too, which plat_midi_in leaves out), stamped with plat_ms at arrival. An entry is a
+ * word w: up to 3 bytes (TAP_B), how many (TAP_LEN), the source (TAP_SRC: TAP_*) and what it is (TAP_KIND: TK_*):
+ *   TK_MSG    a whole message, its status byte on the wire (real time, system common, channel)
+ *   TK_RS     a whole message by running status: TAP_B(w, 0) is the status it ran on, not on the wire
+ *   TK_SX     SysEx bytes, in order (F0 the first byte of the first, F7 the last of the last)
+ *   TK_CUT    a message cut off by the next status: what came of it (F0 alone: a SysEx with no F7)
+ *   TK_STRAY  a byte that belongs to nothing (a data byte with no status, an F7 with no SysEx)
+ * Bluetooth comes as two sources: the computer connected to the FM-1 (BLE_HOST), the device it connected to
+ * (BLE_DEV). Main loop only. */
+enum { TAP_USB, TAP_TRS, TAP_BLE_HOST, TAP_BLE_DEV, NTAPS };
+enum { TK_MSG, TK_RS, TK_SX, TK_CUT, TK_STRAY };
+#define TAP_B(w, i) ((w) >> (8u * (i)) & 0xFFu)
+#define TAP_LEN(w) ((w) >> 24 & 3u)
+#define TAP_SRC(w) ((w) >> 26 & 3u)
+#define TAP_KIND(w) ((w) >> 28)
+int plat_tap(uint32_t *ms, uint32_t *w);   /* 1 = the next entry, the millisecond it came */
+uint32_t plat_tap_drops(int src);       /* entries lost (the ring was full) since the start */
+uint32_t plat_tap_bytes(int src);       /* MIDI bytes in since the start */
+
 /* Bluetooth MIDI (fm1.toml ble = true: FM1B_BLE 1): JieLi's BT libraries on fm1-base's shim (ble/), started at
  * every boot unless the last Bluetooth run crashed (then by hand: plat_ble_start). The app gives it a store object,
  * OBJ_BLE (the radio's address and pairing). Without it (FM1B_BLE 0, tools/build.py --no-ble) nothing of JieLi's is

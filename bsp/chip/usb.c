@@ -958,6 +958,9 @@ static void sysex_byte(uint8_t b)
 static void midi_in_event(uint32_t pkt)                 /* one USB-MIDI event packet */
 {
     uint32_t cin = pkt & 15u, st = (pkt >> 8) & 0xFFu;
+#ifdef FM1B_MIDI_TAP
+    tap_usb(pkt, fm1_ms);                               /* the monitor's copy, all of it (device/midi_tap.c) */
+#endif
     if (cin >= 4u && cin <= 7u) {
         uint32_t k, nb = cin == 4u || cin == 7u ? 3u : cin == 6u ? 2u : 1u;
         for (k = 0; k < nb; k++)
