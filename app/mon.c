@@ -50,6 +50,7 @@ static uint32_t ev_type(uint32_t st)
 }
 
 static void mon_event(const ev_t *e);  /* app.c: lights, clock, held notes */
+static void thru(uint32_t w);          /* app.c: each tap entry out again (THRU) */
 
 static ev_t *ev_new(uint32_t ms, uint32_t src, uint32_t kind, uint32_t type)
 {
@@ -120,6 +121,7 @@ static void mon_poll(void)
     while (budget-- > 0 && plat_tap(&ms, &w)) {
         uint32_t src = TAP_SRC(w), kind = TAP_KIND(w), n = TAP_LEN(w), b0 = TAP_B(w, 0);
         ev_t *e;
+        thru(w);
         if (kind == TK_SX) {
             for (i = 0; i < n; i++)
                 sx_byte(src, TAP_B(w, i), ms);

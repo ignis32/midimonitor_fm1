@@ -19,8 +19,8 @@
 #define NLINES (BODY_H / LINE_H)
 #define CW 6                           /* FONT_XS's advance */
 
-enum { TAB_LOG, TAB_FILTER, TAB_STATS, NTABS };
-static const char *const TAB_NAME[NTABS] = {"LOG", "FILTER", "STATS"};
+enum { TAB_LOG, TAB_FILTER, TAB_STATS, TAB_GLO, NTABS };
+static const char *const TAB_NAME[NTABS] = {"LOG", "FILTER", "STATS", "GLO"};
 static const char *const FMT_NAME[3] = {"HEX", "HUMAN", "BOTH"};
 static const char *const TIME_NAME[3] = {"+MS", "ABS", "NO T"};
 
@@ -63,7 +63,7 @@ static void draw_header(void)
         } else {
             cv_text(x, 2, &FONT_S, TAB_NAME[i], G_DIM);
         }
-        x += w + 14;
+        x += w + 12;
     }
     if (ui.paused)
         text_inv(240 - 4 - text_w(&FONT_XS, "PAUSED"), 4, &FONT_XS, "PAUSED", (plat_ms() / 500u) & 1u ? G_HI : G_MID);
@@ -99,7 +99,9 @@ static void draw_footer(void)
     d = s_cat(t, FMT_NAME[set.fmt]);
     *d++ = ' ';
     d = s_cat(d, TIME_NAME[set.tmode]);
-    s_cat(d, set.midc == 3 ? " C3" : " C4");
+    d = s_cat(d, set.midc == 3 ? " C3" : " C4");
+    if (set.thru)
+        s_cat(d, " THRU");
     cv_text(240 - 4 - text_w(&FONT_XS, t), 6, &FONT_XS, t, G_DIM);
     scanlines();
     cv_blit(0, FOOT_Y);
@@ -241,6 +243,63 @@ static void draw_filter(void)
     cv_text(4, 178, &FONT_XS, "OCT- NONE  OCT+ ALL  EDIT DEFAULTS", G_DIM);
 }
 
+/* Bluetooth's state, three lines from y; returns the y after them */
+static int32_t draw_bt_state(int32_t y)
+{
+    static const char *const DEV[] = {"--", "SCANNING", "CONNECTING", "SEARCHING", "CONNECTED"};
+    int st = plat_ble_device();
+    cv_text(4, y, &FONT_XS, "BLUETOOTH", G_MID);
+    cv_text(4 + 11 * CW, y, &FONT_XS, !FM1B_BLE ? "NOT BUILT" : set.ble_off ? "OFF" :
+            plat_ble_state() == BLE_READY ? "ON" : plat_ble_state() == BLE_FAILED ? "FAILED" : "STARTING", G_HI);
+    y += 14;
+    cv_text(4, y, &FONT_XS, " COMPUTER", G_DIM);
+    cv_text(4 + 11 * CW, y, &FONT_XS, plat_ble_connected() ? "CONNECTED" : plat_ble_linked() ? "LINKED" : "--", G_HI);
+    y += 14;
+    cv_text(4, y, &FONT_XS, " DEVICE", G_DIM);
+    cv_text(4 + 11 * CW, y, &FONT_XS, st >= 0 && st <= BLE_DEV_READY ? DEV[st] : "?", G_HI);
+    if (*btdev_name() && st != BLE_DEV_OFF && st != BLE_DEV_SCANNING)
+        cv_text(4 + 22 * CW, y, &FONT_XS, btdev_name(), G_MID);
+    return y + 14;
+}
+
+/* ------------------------------------------------------------------- GLO --- */
+static void draw_glo(void)
+{
+    static const char *const LABEL[4] = {"K1 BLUETOOTH", "K2 DEVICE", "K3 THRU", "K4 NOTE 60"};
+    char name[21];
+    const char *val[4];
+    int32_t y = 2, i, n;
+    val[0] = !FM1B_BLE ? "NOT BUILT" : set.ble_off ? "OFF" : "ON";
+    val[1] = !FM1B_BLE_CENTRAL || set.ble_off ? "--" : btdev_busy() ? btdev_name() : btdev_count() ? "TURN TO PICK"
+             : "SCANNING..";
+    val[2] = set.thru ? "ON  (ALL IN -> OUT)" : "OFF";
+    val[3] = set.midc == 3u ? "C3 (YAMAHA)" : "C4 (ROLAND)";
+    for (i = 0; i < 4; i++, y += 15) {
+        cv_text(4, y, &FONT_XS, LABEL[i], G_MID);
+        cv_text(4 + 14 * CW, y, &FONT_XS, val[i], G_HI);
+    }
+    y += 4;
+    cv_rect(4, y, 232, 1, G_FAINT);
+    y += 6;
+    y = draw_bt_state(y);
+    y += 6;
+    if (FM1B_BLE_CENTRAL && !set.ble_off && !btdev_busy()) {   /* the devices found, the pick lit */
+        cv_text(4, y, &FONT_XS, "MIDI DEVICES AROUND", G_MID);
+        y += 14;
+        n = btdev_count();
+        for (i = 0; i < n && y < BODY_H - LINE_H; i++, y += 13) {
+            int rssi = 0;
+            btdev_found(i, name, &rssi);
+            if (i == btdev_pick() && ui.ask == ASK_CONNECT)
+                text_inv(10, y, &FONT_XS, name, G_HI);
+            else
+                cv_text(10, y, &FONT_XS, name, G_HI);
+        }
+        if (!n)
+            cv_text(10, y, &FONT_XS, (plat_ms() / 500u) & 1u ? "SCANNING_" : "SCANNING", G_DIM);
+    }
+}
+
 /* ----------------------------------------------------------------- STATS --- */
 static void draw_stats(void)
 {
@@ -258,20 +317,8 @@ static void draw_stats(void)
         cv_text(4, y, &FONT_XS, t, set.srcs >> s & 1u ? G_HI : G_DIM);
     }
     y += 22;
-    cv_text(4, y, &FONT_XS, "BLUETOOTH", G_MID);
-    cv_text(4 + 11 * CW, y, &FONT_XS, !FM1B_BLE ? "NOT BUILT" : set.ble_off ? "OFF" :
-            plat_ble_state() == BLE_READY ? "ON" : plat_ble_state() == BLE_FAILED ? "FAILED" : "STARTING", G_HI);
-    y += 14;
-    cv_text(4, y, &FONT_XS, " COMPUTER", G_DIM);
-    cv_text(4 + 11 * CW, y, &FONT_XS, plat_ble_connected() ? "CONNECTED" : plat_ble_linked() ? "LINKED" : "--", G_HI);
-    y += 14;
-    cv_text(4, y, &FONT_XS, " DEVICE", G_DIM);
-    {
-        static const char *const DEV[] = {"--", "SCANNING", "CONNECTING", "SEARCHING", "CONNECTED"};
-        int st = plat_ble_device();
-        cv_text(4 + 11 * CW, y, &FONT_XS, st >= 0 && st <= BLE_DEV_READY ? DEV[st] : "?", G_HI);
-    }
-    y += 22;
+    y = draw_bt_state(y);
+    y += 8;
     cv_text(4, y, &FONT_XS, "CLOCK", G_MID);
     if (ui.bpm10 && plat_ms() - ui.clk_ms < 1000u) {
         d = s_dec(t, (int32_t)(ui.bpm10 / 10u), 0);
@@ -300,15 +347,32 @@ static void draw_body(void)
         draw_log();
     else if (ui.tab == TAB_FILTER)
         draw_filter();
-    else
+    else if (ui.tab == TAB_STATS)
         draw_stats();
+    else
+        draw_glo();
     if (ui.ask) {                      /* a question: OCT- NO on the left, OCT+ YES on the right */
+        char q[32] = "", name[21] = "";
+        if (ui.ask == ASK_CLEAR)
+            s_cat(q, "CLEAR THE LOG?");
+        else if (ui.ask == ASK_BT)
+            s_cat(q, set.ble_off ? "BLUETOOTH ON?" : "BLUETOOTH OFF?");
+        else if (ui.ask == ASK_LET_GO)
+            s_cat(q, "DISCONNECT?");
+        else
+            s_cat(q, "CONNECT TO");
+        if (ui.ask == ASK_CONNECT)
+            btdev_found(btdev_pick(), name, 0);
+        else if (ui.ask == ASK_LET_GO)
+            s_cat(name, btdev_name());
         cv_rect(20, 60, 200, 64, G_BG);
         cv_rect(20, 60, 200, 1, G_HI);
         cv_rect(20, 123, 200, 1, G_HI);
         cv_rect(20, 60, 1, 64, G_HI);
         cv_rect(219, 60, 1, 64, G_HI);
-        cv_text(120 - text_w(&FONT_S, "CLEAR THE LOG?") / 2, 72, &FONT_S, "CLEAR THE LOG?", G_HI);
+        cv_text(120 - text_w(&FONT_S, q) / 2, name[0] ? 66 : 72, &FONT_S, q, G_HI);
+        if (name[0])
+            cv_text(120 - text_w(&FONT_XS, name) / 2, 84, &FONT_XS, name, G_GLOW);
         cv_text(28, 102, &FONT_XS, "< OCT- NO", G_MID);
         cv_text(212 - text_w(&FONT_XS, "YES OCT+ >"), 102, &FONT_XS, "YES OCT+ >", G_MID);
     }

@@ -113,12 +113,6 @@ spin K2 2
 spin K1 1
 wait 50
 expect fmt 2
-spin K3 1
-wait 20
-expect midc 3
-spin K3 1
-wait 20
-expect midc 4
 
 # pause: the view stays, the log goes on
 tap PLAY
@@ -178,6 +172,61 @@ expect types 1407
 expect chans 65535
 turn PRESET -1
 wait 50
+
+# GLO: the settings page (and back to where we were)
+tap GLO
+wait 50
+expect tab 3
+spin K4 1
+wait 20
+expect midc 3
+spin K4 1
+wait 20
+expect midc 4
+
+# thru: what comes in goes out to the outputs it did not come from
+out
+midi TRS 90 3C 64
+wait 20
+out
+spin K3 1
+wait 20
+expect thru 1
+midi TRS 90 3D 64
+wait 20
+expect_out USB 90 3D 64
+raw TRS F0 7D 01 02 03 F7
+wait 20
+out
+spin K3 1
+wait 20
+expect thru 0
+
+# Bluetooth: off and on again (K1 asks), then a device (K2 picks it and asks)
+spin K1 1
+wait 20
+expect ask 2
+tap OCT+
+wait 20
+expect ble_off 1
+spin K1 1
+wait 20
+tap OCT+
+wait 1500
+expect ble_off 0
+wait 1000
+shot glo.png
+spin K2 1
+wait 20
+expect ask 3
+shot glo_ask.png
+tap OCT+
+wait 600
+expect ble_dev 4
+shot glo_connected.png
+tap GLO
+wait 50
+expect tab 0
 
 # clear the log: HOME asks, OCT- no, OCT+ yes
 tap HOME

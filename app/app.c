@@ -5,16 +5,17 @@
  * platform: gfx.c and announce.c are in scope.
  *
  * The panel:
- *   PRESETS          the page: LOG, FILTER, STATS
+ *   PRESETS          the page: LOG, FILTER, STATS, GLO
+ *   GLO              the settings page, and back
  *   SELECT           scroll the log back (the view stops; back to the end: live again)
  *   PLAY             pause / go on (the log keeps everything that comes meanwhile)
  *   FX SEL ENV LFO   show / hide USB, TRS, BLE (the computer), DEV (the Bluetooth device)
- *   K1 K2 K3 K4      HEX / HUMAN / BOTH; the time (+ms, since power-on, none); C3 / C4 for note 60; the scanlines
+ *   K1 K2 K3         HEX / HUMAN / BOTH; the time (+ms, since power-on, none); the scanlines
  *   HOME             clear the log (asks: OCT+ yes, OCT- no)
  *   SAVE             keep the settings (lit: changed)
- *   REC              a Bluetooth MIDI device: scan, ALGORITHM picks, REC again connects; held a second, Bluetooth
- *                    off / on
  *   FILTER page      white keys the channels, black keys the messages; OCT- none, OCT+ all, EDIT the defaults
+ *   GLO page         K1 Bluetooth on / off (asks), K2 a Bluetooth device (scans while the page is up; turn: asks to
+ *                    connect to the one picked, or to let the connected one go), K3 THRU, K4 C3 / C4 for note 60
  * The lights: the source buttons flash with what comes in (dim: hidden); the keys light with the notes held (F3..G5,
  * OCT- / OCT+: some below / above); PLAY green on the beat of a clock coming in, red while paused or on an error. */
 
@@ -29,14 +30,18 @@ typedef struct {
     uint8_t ble_off;                     /* Bluetooth switched off (REC held) */
     uint16_t types;                      /* bit TY_*: the messages shown */
     uint16_t chans;                      /* bit c: channel c + 1 shown */
-    uint8_t rsv[2];
+    uint8_t thru;                        /* what comes in goes out again (thru()) */
+    uint8_t rsv[1];
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
 
+/* the questions (OCT+ yes, OCT- no) */
+enum { ASK_NONE, ASK_CLEAR, ASK_BT, ASK_CONNECT, ASK_LET_GO };
+
 static struct {
-    uint32_t tab;
-    uint8_t paused, ask, looking, redraw_all;
+    uint32_t tab, tab_before_glo;
+    uint8_t paused, ask, redraw_all;
     uint32_t scroll, head;               /* lines back from the end; the end the view stays at while it stops */
     uint32_t act[NTAPS];                 /* when each source last sent something (not clock / active sensing) */
     uint32_t rate[NTAPS], rate_from[NTAPS], rate_t;   /* events a second */
@@ -48,7 +53,7 @@ static struct {
     uint8_t running;
     char msg[2][24];
     uint32_t msg_until;
-    uint32_t keys, btn, rec_t;
+    uint32_t keys, btn;
 } ui;
 
 #include "mon.c"
@@ -116,6 +121,46 @@ static void mon_event(const ev_t *e)     /* each event as it is logged (mon.c) *
     }
 }
 
+/* --------------------------------------------------------------- thru --- */
+/* THRU on (GLO K3): each message out again as it comes, to the outputs it did not come from: USB to Bluetooth, the
+ * jack to both, Bluetooth to USB (TO_BLE reaches the computer and the device alike: Bluetooth to Bluetooth would
+ * echo). SysEx to USB only: the Bluetooth side sends no SysEx yet. Cut-off and stray bytes are not passed on */
+static const uint32_t THRU_TO[NTAPS] = {TO_BLE, TO_USB | TO_BLE, TO_USB, TO_USB};
+static struct {
+    uint8_t n, b[3];
+} thru_sx[NTAPS];
+
+static void thru(uint32_t w)             /* each tap entry (mon_poll) */
+{
+    uint32_t src = TAP_SRC(w), kind = TAP_KIND(w), n = TAP_LEN(w), b0 = TAP_B(w, 0), i, cin;
+    if (!set.thru)
+        return;
+    if (kind == TK_SX) {                 /* SysEx in USB-MIDI's packets: 3 bytes a packet, the last says how many */
+        if (!(THRU_TO[src] & TO_USB))
+            return;
+        for (i = 0; i < n; i++) {
+            uint32_t b = TAP_B(w, i), k;
+            if (b == 0xF0u)
+                thru_sx[src].n = 0;
+            k = thru_sx[src].n++;
+            thru_sx[src].b[k] = (uint8_t)b;
+            if (b == 0xF7u || k == 2u) {
+                plat_midi_send((b == 0xF7u ? 5u + k : 4u) | (uint32_t)thru_sx[src].b[0] << 8 |
+                               (k > 0u ? (uint32_t)thru_sx[src].b[1] << 16 : 0u) |
+                               (k > 1u ? (uint32_t)thru_sx[src].b[2] << 24 : 0u), TO_USB);
+                thru_sx[src].n = 0;
+            }
+        }
+        return;
+    }
+    if (kind == TK_CUT && b0 == 0xF0u)
+        thru_sx[src].n = 0;              /* a SysEx cut off: what it still owed is dropped */
+    if (kind != TK_MSG && kind != TK_RS)
+        return;
+    cin = b0 >= 0xF8u ? 0xFu : b0 < 0xF0u ? b0 >> 4 : n == 1u ? 5u : n;   /* system common: 1, 2, 3 bytes */
+    plat_midi_send(cin | (w & 0xFFFFFFu) << 8, THRU_TO[src]);
+}
+
 /* -------------------------------------------------------------- audio --- */
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 {
@@ -150,7 +195,7 @@ static void settings_defaults(void)
 void app_init(void)
 {
     if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC
-        || set.fmt > 2u || set.tmode > 2u || (set.midc != 3u && set.midc != 4u) || set.ble_off > 1u)
+        || set.fmt > 2u || set.tmode > 2u || (set.midc != 3u && set.midc != 4u) || set.ble_off > 1u || set.thru > 1u)
         settings_defaults();
 }
 
@@ -215,50 +260,70 @@ static void scroll_by(int32_t d)         /* + older, - newer */
     ui.redraw_all = 1;
 }
 
-static void ble_toggle(void)             /* REC held a second: Bluetooth off or on (kept with the settings) */
+/* GLO: Bluetooth on / off (K1, asks first), a Bluetooth device (K2: picks one of those found, asks to connect;
+ * connected, asks to let it go) */
+static void glo_bt_knob(void)
 {
-    set.ble_off = (uint8_t)!set.ble_off;
-    plat_ble_enable(!set.ble_off);
-    changed();
-    app_say("BLUETOOTH", set.ble_off ? "OFF" : "ON");
+    if (FM1B_BLE)
+        ui.ask = ASK_BT;
+    ui.redraw_all = 1;
 }
-static void ble_device_say(void)
+static void glo_device_knob(int32_t e)
 {
-    char name[21];
-    if (btdev_found(btdev_pick(), name, 0))
-        app_say("DEVICE", name);
-    else
-        app_say("BLE", "SCANNING");
-}
-static void ble_device_button(void)      /* REC: look for devices; again: connect to the one ALGORITHM picked */
-{
-    int ev;
-    if (!btdev_busy() && !ui.looking) {
-        ui.looking = 1;
-        app_say("BLE", "SCANNING");
+    if (!FM1B_BLE_CENTRAL || set.ble_off)
         return;
+    if (btdev_busy()) {
+        ui.ask = ASK_LET_GO;
+    } else if (btdev_count()) {
+        if (ui.ask == ASK_CONNECT)       /* the question up: the knob moves the pick */
+            btdev_choose(btdev_pick() + e);
+        ui.ask = ASK_CONNECT;
+    } else {
+        app_say("NO DEVICES", "FOUND YET");
     }
-    ev = btdev_save();
-    ui.looking = 0;
-    app_say(ev == BTDEV_CONNECTING ? btdev_word(ev) : "BLE", ev == BTDEV_CONNECTING ? btdev_name() : btdev_word(ev));
+    ui.redraw_all = 1;
+}
+
+static void answer(int yes)              /* the question's answer */
+{
+    uint32_t s;
+    int ev;
+    if (yes && ui.ask == ASK_CLEAR) {
+        mon_clear();
+        ui.scroll = 0;
+        ui.head = 0;
+        for (s = 0; s < 128u; s++)
+            ui.held[s] = 0;
+        app_say("LOG", "CLEARED");
+    } else if (yes && ui.ask == ASK_BT) {   /* kept with the settings: as it is at the next power-on too */
+        set.ble_off = (uint8_t)!set.ble_off;
+        plat_ble_enable(!set.ble_off);
+        plat_store_save(OBJ_SETTINGS, &set, sizeof set);
+        app_say("BLUETOOTH", set.ble_off ? "OFF" : "ON");
+    } else if (yes && (ui.ask == ASK_CONNECT || ui.ask == ASK_LET_GO)) {
+        ev = btdev_save();
+        app_say(btdev_word(ev), ev == BTDEV_CONNECTING ? btdev_name() : "");
+    }
+    ui.ask = ASK_NONE;
+    ui.redraw_all = 1;
 }
 
 static void button(uint32_t k)
 {
     uint32_t s;
     if (ui.ask) {                        /* a question: OCT+ yes, OCT- no, nothing else */
-        if (k == B_OCTUP) {
-            mon_clear();
-            ui.scroll = 0;
-            ui.head = 0;
-            for (s = 0; s < 128u; s++)
-                ui.held[s] = 0;
-            app_say("LOG", "CLEARED");
+        if (k == B_OCTUP || k == B_OCTDN)
+            answer(k == B_OCTUP);
+        return;
+    }
+    if (k == B_GLO) {                    /* the settings page, and back */
+        if (ui.tab == TAB_GLO) {
+            ui.tab = ui.tab_before_glo;
+        } else {
+            ui.tab_before_glo = ui.tab;
+            ui.tab = TAB_GLO;
         }
-        if (k == B_OCTUP || k == B_OCTDN) {
-            ui.ask = 0;
-            ui.redraw_all = 1;
-        }
+        ui.redraw_all = 1;
         return;
     }
     for (s = 0; s < NTAPS; s++)
@@ -278,7 +343,7 @@ static void button(uint32_t k)
         ui.redraw_all = 1;
         break;
     case B_HOME:
-        ui.ask = 1;
+        ui.ask = ASK_CLEAR;
         ui.redraw_all = 1;
         break;
     case B_SAVE:
@@ -288,10 +353,6 @@ static void button(uint32_t k)
         } else {
             app_say("SAVE", "FAILED");
         }
-        break;
-    case B_REC:
-        if (FM1B_BLE)
-            ui.rec_t = plat_ms() | 1u;   /* on release (held: Bluetooth off / on) */
         break;
     case B_EDIT:
         if (ui.tab == TAB_FILTER) {
@@ -346,18 +407,6 @@ static void input(void)
     for (k = 0; k < NB; k++)
         if ((btn >> k & 1u) && !(ui.btn >> k & 1u))
             button(k);
-    if (FM1B_BLE && ui.rec_t) {         /* REC: held a second, Bluetooth on / off; a press, a device */
-        if (btn >> B_REC & 1u) {
-            if (plat_ms() - ui.rec_t >= 1000u) {
-                ui.rec_t = 0;
-                ble_toggle();
-            }
-        } else {
-            ui.rec_t = 0;
-            if (FM1B_BLE_CENTRAL && !set.ble_off)
-                ble_device_button();
-        }
-    }
     ui.keys = keys;
     ui.btn = btn;
     if ((e = plat_enc(EN_PRESET)) != 0 && !ui.ask) {
@@ -366,9 +415,20 @@ static void input(void)
     }
     if ((e = plat_enc(EN_SELECT)) != 0 && ui.tab == TAB_LOG && !ui.ask)
         scroll_by(-e);
-    if ((e = plat_enc(EN_ALGO)) != 0 && FM1B_BLE_CENTRAL && ui.looking) {
-        btdev_choose(btdev_pick() + e);
-        ble_device_say();
+    if (ui.tab == TAB_GLO) {             /* the settings: Bluetooth, the device, note 60, the scanlines */
+        if (plat_enc(EN_K1) != 0 && !ui.ask)
+            glo_bt_knob();
+        if ((e = plat_enc(EN_K2)) != 0 && (!ui.ask || ui.ask == ASK_CONNECT))
+            glo_device_knob(e);
+        if (plat_enc(EN_K3) != 0 && !ui.ask) {
+            set.thru = (uint8_t)!set.thru;
+            changed();
+        }
+        if (plat_enc(EN_K4) != 0 && !ui.ask) {
+            set.midc = set.midc == 3u ? 4u : 3u;
+            changed();
+        }
+        return;
     }
     if ((e = plat_enc(EN_K1)) != 0) {
         set.fmt = (uint8_t)(((int32_t)set.fmt + (e > 0 ? 1 : 2)) % 3);
@@ -382,15 +442,11 @@ static void input(void)
         app_say("TIME", T[set.tmode]);
     }
     if (plat_enc(EN_K3) != 0) {
-        set.midc = set.midc == 3u ? 4u : 3u;
-        changed();
-        app_say("NOTE 60 IS", set.midc == 3u ? "C3" : "C4");
-    }
-    if (plat_enc(EN_K4) != 0) {
         set.scan = (uint8_t)!set.scan;
         changed();
         app_say("SCANLINES", set.scan ? "ON" : "OFF");
     }
+    plat_enc(EN_K4);                     /* (free for now) */
 }
 
 void app_input_only(void) { input(); }
@@ -474,16 +530,19 @@ void app_frame(void)
     mon_poll();
     input();
     speak();
-    if (FM1B_BLE_CENTRAL) {              /* looking: a device found is named at once (REC connects to it) */
+    if (FM1B_BLE) {                      /* GLO up: the scan for devices; what happened, in words */
         static int found;
-        int n = ui.looking ? btdev_count() : 0, ev;
-        btdev_page(ui.looking && !set.ble_off);
-        if (n > found && btdev_pick() < n)
-            ble_device_say();
-        found = n;
-        while ((ev = btdev_event()) != BTDEV_NONE)
-            if (ev == BTDEV_CONNECTED || ev == BTDEV_NO_ANSWER || ev == BTDEV_LOST)
-                app_say("DEVICE", btdev_word(ev));
+        int ev;
+        btdev_page(ui.tab == TAB_GLO && !set.ble_off);
+        if (btdev_count() != found) {
+            found = btdev_count();
+            ui.redraw_all = 1;
+        }
+        while ((ev = btdev_event()) != BTDEV_NONE) {
+            app_say(ev == BTDEV_COMPUTER || ev == BTDEV_COMPUTER_GONE ? "BLE" : "DEVICE", btdev_word(ev));
+            if (ui.ask == ASK_LET_GO || ui.ask == ASK_CONNECT)
+                ui.ask = ASK_NONE;       /* (what it asked about changed under it) */
+        }
     }
     if (now - ui.rate_t >= 1000u) {      /* events a second */
         ui.rate_t = now;
@@ -496,7 +555,7 @@ void app_frame(void)
     for (s = 0; s < NTAPS; s++)
         sig |= (uint32_t)(ui.act[s] && now - ui.act[s] < 90u) << s;
     sig |= (uint32_t)set.srcs << 4 | (uint32_t)set.fmt << 8 | (uint32_t)set.tmode << 10 | set.midc << 12 |
-           (uint32_t)set.scan << 15;
+           (uint32_t)set.scan << 15 | (uint32_t)set.thru << 16;
     if (ui.msg_until && now >= ui.msg_until) {
         ui.msg_until = 0;
         ui.redraw_all = 1;
@@ -560,6 +619,10 @@ int app_expect(const char *what, int *got)
         *got = set.midc;
     else if (!strcmp(what, "dirty"))
         *got = set_dirty;
+    else if (!strcmp(what, "thru"))
+        *got = set.thru;
+    else if (!strcmp(what, "ble_off"))
+        *got = set.ble_off;
     else
         return 0;
     return 1;
