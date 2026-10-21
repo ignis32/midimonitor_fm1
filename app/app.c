@@ -6,7 +6,7 @@
  *
  * The panel:
  *   PRESETS          the page: LOG, FILTER, STATS, THRU, GLO
- *   GLO              the settings page, and back
+ *   GLO              the settings: page 1, page 2, then back
  *   SELECT           scroll the log back (the view stops; back to the end: live again)
  *   PLAY             pause / go on (the log keeps everything that comes meanwhile)
  *   FX SEL ENV LFO   show / hide USB, TRS, BLE (the computer), DEV (the Bluetooth device)
@@ -18,6 +18,7 @@
  *                    K4 thru on / off (the routes kept)
  *   GLO page         K1 Bluetooth on / off (asks), K2 a Bluetooth device (scans while the page is up; turn: asks to
  *                    connect to the one picked, or to let the connected one go), K3 C3 / C4 for note 60
+ *   GLO page 2       K1 the skin (the colours), K2 the platform's own SysEx over USB logged or not
  * The lights: the source buttons flash with what comes in (dim: hidden); the keys light with the notes held (F3..G5,
  * OCT- / OCT+: some below / above); PLAY green on the beat of a clock coming in, red while paused or on an error. */
 
@@ -38,7 +39,9 @@ typedef struct {
     uint16_t chans;                      /* bit c: channel c + 1 shown */
     uint8_t thru;                        /* thru on: what comes in goes out again by routes (thru()) */
     uint8_t routes[NTAPS];               /* per source: bit OUT_* = it goes out there */
-    uint8_t rsv[3];
+    uint8_t skin;                        /* the colours (view.c SKINS) */
+    uint8_t show_sys;                    /* log the platform's own SysEx too (screen reader, remote, updates) */
+    uint8_t rsv[1];
     uint16_t rt_types[NTAPS][NOUTS];     /* each route's filter: bit TY_* passes (as the display's) */
     uint16_t rt_chans[NTAPS][NOUTS];     /* bit c: channel c + 1 passes */
 } settings_t;
@@ -49,7 +52,7 @@ static uint8_t set_dirty;
 enum { ASK_NONE, ASK_CLEAR, ASK_BT, ASK_CONNECT, ASK_LET_GO };
 
 static struct {
-    uint32_t tab, tab_before_glo;
+    uint32_t tab, tab_before_glo, glo_page;   /* GLO: page 0 (Bluetooth, note 60) or 1 (the look, the log) */
     uint8_t paused, ask, redraw_all;
     uint32_t scroll, head;               /* lines back from the end; the end the view stays at while it stops */
     uint32_t act[NTAPS];                 /* when each source last sent something (not clock / active sensing) */
@@ -257,7 +260,7 @@ static void settings_defaults(void)
 void app_init(void)
 {
     if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC
-        || set.fmt > 2u || set.tmode > 2u || (set.midc != 3u && set.midc != 4u) || set.ble_off > 1u || set.thru > 1u)
+        || set.fmt > 2u || set.tmode > 2u || (set.midc != 3u && set.midc != 4u) || set.ble_off > 1u || set.thru > 1u || set.skin >= NSKINS || set.show_sys > 1u)
         settings_defaults();
 }
 
@@ -407,12 +410,16 @@ static void button(uint32_t k)
             answer(k == B_OCTUP);
         return;
     }
-    if (k == B_GLO) {                    /* the settings page, and back */
-        if (ui.tab == TAB_GLO) {
-            ui.tab = ui.tab_before_glo;
-        } else {
+    if (k == B_GLO) {                    /* the settings' pages in turn, then back */
+        if (ui.tab != TAB_GLO) {
             ui.tab_before_glo = ui.tab;
             ui.tab = TAB_GLO;
+            ui.glo_page = 0;
+        } else if (ui.glo_page == 0) {
+            ui.glo_page = 1;
+        } else {
+            ui.tab = ui.tab_before_glo == TAB_GLO ? TAB_LOG : ui.tab_before_glo;
+            ui.glo_page = 0;
         }
         ui.redraw_all = 1;
         return;
@@ -511,7 +518,21 @@ static void input(void)
     sel = plat_enc(EN_SELECT);           /* (read once: the LOG scrolls with it, THRU picks a source) */
     if (sel && ui.tab == TAB_LOG && !ui.ask)
         scroll_by(-sel);
-    if (ui.tab == TAB_GLO) {             /* the settings: Bluetooth, the device, note 60, the scanlines */
+    if (ui.tab == TAB_GLO && ui.glo_page == 1) {   /* the settings, page 2: the skin, the platform's SysEx */
+        if ((e = plat_enc(EN_K1)) != 0 && !ui.ask) {
+            set.skin = (uint8_t)(((int32_t)set.skin + (e > 0 ? 1 : (int32_t)NSKINS - 1)) % (int32_t)NSKINS);
+            changed();
+            lcd_fill(0, 0, 240, 240, G_BG);   /* (the gaps between the bands too) */
+        }
+        if (plat_enc(EN_K2) != 0 && !ui.ask) {
+            set.show_sys = (uint8_t)!set.show_sys;
+            changed();
+        }
+        plat_enc(EN_K3);
+        plat_enc(EN_K4);
+        return;
+    }
+    if (ui.tab == TAB_GLO) {             /* the settings: Bluetooth, the device, note 60 */
         if (plat_enc(EN_K1) != 0 && !ui.ask)
             glo_bt_knob();
         if ((e = plat_enc(EN_K2)) != 0 && (!ui.ask || ui.ask == ASK_CONNECT))
@@ -651,7 +672,7 @@ void app_frame(void)
     if (FM1B_BLE) {                      /* GLO up: the scan for devices; what happened, in words */
         static int found;
         int ev;
-        btdev_page(ui.tab == TAB_GLO && !set.ble_off);
+        btdev_page(ui.tab == TAB_GLO && ui.glo_page == 0 && !set.ble_off);
         if (btdev_count() != found) {
             found = btdev_count();
             ui.redraw_all = 1;
@@ -748,6 +769,12 @@ int app_expect(const char *what, int *got)
         *got = set.rt_chans[(what[8] - '0') % NTAPS][(what[9] - '0') % NOUTS];
     else if (!strcmp(what, "rt_edit"))
         *got = ui.rt_edit;
+    else if (!strcmp(what, "skin"))
+        *got = set.skin;
+    else if (!strcmp(what, "show_sys"))
+        *got = set.show_sys;
+    else if (!strcmp(what, "glo_page"))
+        *got = (int)ui.glo_page;
     else if (!strncmp(what, "route", 5))    /* routeN: source N's outputs (bit 0 USB, 1 BLE-P, 2 BLE-C) */
         *got = set.routes[atoi(what + 5) % NTAPS];
     else if (!strcmp(what, "thru_row"))

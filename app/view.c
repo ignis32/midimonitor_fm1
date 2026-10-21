@@ -2,13 +2,23 @@
 /* The screens, in a green phosphor terminal's look: the tabs (header), the page (body: LOG, FILTER, STATS) and the
  * sources (footer). Part of app.c, after mon.c. */
 
-/* the phosphor's shades */
-#define G_BG RGB(2, 12, 6)
-#define G_FAINT RGB(14, 52, 28)
-#define G_DIM RGB(30, 104, 56)
-#define G_MID RGB(56, 184, 96)
-#define G_HI RGB(112, 255, 150)
-#define G_GLOW RGB(196, 255, 214)
+/* the phosphor's shades, per skin (GLO 2, K1): background, faint, dim, mid, lit, glow */
+static const uint16_t SKINS[][6] = {
+    {RGB(2, 12, 6), RGB(14, 52, 28), RGB(30, 104, 56), RGB(56, 184, 96), RGB(112, 255, 150), RGB(196, 255, 214)},
+    {RGB(14, 8, 0), RGB(60, 34, 0), RGB(122, 72, 0), RGB(204, 124, 12), RGB(255, 178, 44), RGB(255, 222, 150)},
+    {RGB(0, 8, 14), RGB(0, 42, 62), RGB(0, 92, 124), RGB(40, 172, 212), RGB(124, 230, 255), RGB(214, 246, 255)},
+    {RGB(8, 8, 8), RGB(50, 50, 50), RGB(100, 100, 100), RGB(170, 170, 170), RGB(236, 236, 236), RGB(255, 255, 255)},
+    {RGB(12, 0, 0), RGB(62, 10, 10), RGB(124, 26, 24), RGB(204, 54, 42), RGB(255, 104, 84), RGB(255, 192, 172)},
+};
+static const char *const SKIN_NAME[] = {"GREEN", "AMBER", "CYAN", "WHITE", "RED"};
+#define NSKINS (sizeof SKINS / sizeof SKINS[0])
+#define SKIN(i) SKINS[set.skin < NSKINS ? set.skin : 0][i]
+#define G_BG SKIN(0)
+#define G_FAINT SKIN(1)
+#define G_DIM SKIN(2)
+#define G_MID SKIN(3)
+#define G_HI SKIN(4)
+#define G_GLOW SKIN(5)
 
 #define HEAD_H 22
 #define BODY_Y 24
@@ -330,12 +340,42 @@ static void draw_thru(void)
 }
 
 /* ------------------------------------------------------------------- GLO --- */
+static void draw_glo2(void)              /* page 2: the look, what the log keeps */
+{
+    int32_t y = 2;
+    uint32_t i;
+    cv_text(4, y, &FONT_XS, "K1 SKIN", G_MID);
+    cv_text(4 + 14 * CW, y, &FONT_XS, SKIN_NAME[set.skin < NSKINS ? set.skin : 0], G_HI);
+    y += 15;
+    cv_text(4, y, &FONT_XS, "K2 PLATFORM SX", G_MID);
+    cv_text(4 + 15 * CW, y, &FONT_XS, set.show_sys ? "LOGGED" : "HIDDEN", G_HI);
+    y += 22;
+    for (i = 0; i < NSKINS; i++) {       /* every skin's shades, the one in use marked */
+        uint32_t c;
+        int32_t x = 4 + (int32_t)i * 46;
+        for (c = 0; c < 6u; c++)
+            cv_rect(x + (int32_t)c * 7, y, 6, 14, SKINS[i][c]);
+        if (i == set.skin)
+            cv_rect(x, y + 17, 41, 2, G_HI);
+    }
+    y += 32;
+    cv_text(4, y, &FONT_XS, "PLATFORM SX: THE FM-1'S OWN SYSEX OVER", G_DIM);
+    cv_text(4, y + 13, &FONT_XS, "USB (SCREEN READER, REMOTE, UPDATES).", G_DIM);
+    cv_text(4, y + 26, &FONT_XS, "HIDDEN: NOT IN THE LOG OR ITS COUNTS.", G_DIM);
+    cv_text(4, y + 52, &FONT_XS, "GLO: BACK", G_FAINT);
+}
+
 static void draw_glo(void)
 {
     static const char *const LABEL[3] = {"K1 BLUETOOTH", "K2 DEVICE", "K3 NOTE 60"};
     char name[21];
     const char *val[3];
     int32_t y = 2, i, n;
+    cv_text(240 - 4 - 3 * CW, 2, &FONT_XS, ui.glo_page ? "2/2" : "1/2", G_DIM);
+    if (ui.glo_page) {
+        draw_glo2();
+        return;
+    }
     val[0] = !FM1B_BLE ? "NOT BUILT" : set.ble_off ? "OFF" : "ON";
     val[1] = !FM1B_BLE_CENTRAL || set.ble_off ? "--" : btdev_busy() ? btdev_name() : btdev_count() ? "TURN TO PICK"
              : "SCANNING..";

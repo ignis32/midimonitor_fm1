@@ -70,6 +70,14 @@ static void ev_done(ev_t *e)
     mon_event(e);
 }
 
+/* the platform's own SysEx over USB: the screen reader (7D 53 52), the remote and its logs (7D 4C), M-VAVE's update
+ * keys (22 24 35), the update's framing (pack7 of 00 59: 00 32), which backups and mirroring use too */
+static int sx_platform(const uint8_t *b, uint32_t n)
+{
+    return n >= 4u && ((b[1] == 0x7Du && (b[2] == 0x4Cu || (b[2] == 0x53u && b[3] == 0x52u))) ||
+                       (b[1] == 0x22u && b[2] == 0x24u && b[3] == 0x35u) || (b[1] == 0x00u && b[2] == 0x32u));
+}
+
 static void sx_end(uint32_t src, int whole)
 {
     ev_t *e;
@@ -77,6 +85,10 @@ static void sx_end(uint32_t src, int whole)
     if (!sx_in[src].open)
         return;
     k = sx_in[src].n < SX_KEEP ? sx_in[src].n : SX_KEEP;
+    if (src == TAP_USB && !set.show_sys && sx_platform(sx_in[src].b, k)) {
+        sx_in[src].open = 0;           /* not logged unless asked (GLO 2) */
+        return;
+    }
     e = ev_new(sx_in[src].ms, src, whole ? EV_SYSEX : EV_SXCUT, TY_SYSEX);
     e->sxo = sx_w;
     e->sxn = (uint16_t)(sx_in[src].n < 0xFFFFu ? sx_in[src].n : 0xFFFFu);

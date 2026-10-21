@@ -206,6 +206,41 @@ tap OCT+
 wait 600
 expect ble_dev 4
 shot glo_connected.png
+
+# GLO again: its page 2 (the skin, the platform's SysEx); again: back
+tap GLO
+wait 50
+expect tab 4
+expect glo_page 1
+spin K1 1
+wait 50
+expect skin 1
+shot glo2_amber.png
+spin K1 -1
+wait 50
+expect skin 0
+expect show_sys 0
+expect events >40
+raw USB 90 30 01
+wait 20
+raw USB F0 7D 53 52 01 F7
+wait 20
+raw USB F0 7D 4C 43 01 F7
+wait 20
+raw USB F0 00 32 01 02 F7
+wait 20
+expect last_b1 48
+raw USB F0 7E 7F 06 01 F7
+wait 20
+expect last_b0 126
+spin K2 1
+wait 20
+expect show_sys 1
+raw USB F0 7D 53 52 01 F7
+wait 20
+expect last_b0 125
+spin K2 1
+wait 20
 tap GLO
 wait 50
 expect tab 0
