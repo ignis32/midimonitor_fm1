@@ -156,6 +156,9 @@ static int log_collect(uint32_t head, uint32_t skip, int32_t *out, int n)
     }
 }
 
+static uint32_t view_cuts;              /* log lines cut to fit (the tests: none) */
+static int32_t view_maxx;              /* the furthest a log line reached (the tests: within 240) */
+
 static void draw_line(int32_t y, const ev_t *e, const ev_t *prev)
 {
     char t[48], *d;
@@ -191,29 +194,40 @@ static void draw_line(int32_t y, const ev_t *e, const ev_t *prev)
     x += 6 * CW;
     if (set.fmt != 1) {                /* the bytes; a running status's own byte (not on the wire) dim */
         int max = set.fmt == 2 ? 8 : (240 - x) / CW;
+        int32_t end;
         ev_hex(e, t, max);
         if (e->kind == EV_RS) {
             char c = t[2];
             t[2] = 0;
             cv_text(x, y, &FONT_XS, t, G_FAINT);
             t[2] = c;
-            cv_text(x + 2 * CW, y, &FONT_XS, t + 2, mid);
+            end = cv_text(x + 2 * CW, y, &FONT_XS, t + 2, mid);
         } else {
-            cv_text(x, y, &FONT_XS, t, err ? G_BG : mid);
+            end = cv_text(x, y, &FONT_XS, t, err ? G_BG : mid);
         }
+        if (end > view_maxx)
+            view_maxx = end;
         if (set.fmt == 0)
             return;
         x += 9 * CW;
     }
     {
-        int ch = ev_human(e, t, set.midc);
+        int room = (240 - (int)x - 3 * CW) / CW, ch = ev_human(e, t, set.midc, room);
+        int32_t end;
         if (ch) {
             char c[4];
             s_dec(c, ch, 2);
             cv_text(x, y, &FONT_XS, c, err ? G_BG : G_DIM);
         }
         x += 3 * CW;
-        cv_text(x, y, &FONT_XS, t, err ? G_BG : hi);
+        if (s_len(t) > room) {         /* (should not happen: the short forms fit; ~ marks it if it does) */
+            t[room - 1] = '~';
+            t[room] = 0;
+            view_cuts++;
+        }
+        end = cv_text(x, y, &FONT_XS, t, err ? G_BG : hi);
+        if (end > view_maxx)
+            view_maxx = end;
     }
 }
 
@@ -273,9 +287,10 @@ static int32_t draw_bt_state(int32_t y)
     cv_text(4 + 11 * CW, y, &FONT_XS, plat_ble_connected() ? "CONNECTED" : plat_ble_linked() ? "LINKED" : "--", G_HI);
     y += 14;
     cv_text(4, y, &FONT_XS, " DEVICE", G_DIM);
-    cv_text(4 + 11 * CW, y, &FONT_XS, st >= 0 && st <= BLE_DEV_READY ? DEV[st] : "?", G_HI);
-    if (*btdev_name() && st != BLE_DEV_OFF && st != BLE_DEV_SCANNING)
-        cv_text(4 + 22 * CW, y, &FONT_XS, btdev_name(), G_MID);
+    if (st == BLE_DEV_READY && *btdev_name())   /* connected: its name (20 at most: it fits from here) */
+        cv_text(4 + 11 * CW, y, &FONT_XS, btdev_name(), G_HI);
+    else
+        cv_text(4 + 11 * CW, y, &FONT_XS, st >= 0 && st <= BLE_DEV_READY ? DEV[st] : "?", G_HI);
     return y + 14;
 }
 

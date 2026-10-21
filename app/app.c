@@ -770,6 +770,10 @@ int app_expect(const char *what, int *got)
         *got = set.rt_chans[(what[8] - '0') % NTAPS][(what[9] - '0') % NOUTS];
     else if (!strcmp(what, "rt_edit"))
         *got = ui.rt_edit;
+    else if (!strcmp(what, "maxx"))      /* the furthest a log line reached so far (in 240) */
+        *got = (int)view_maxx;
+    else if (!strcmp(what, "cuts"))      /* log lines that had to be cut to fit */
+        *got = (int)view_cuts;
     else if (!strcmp(what, "skin"))
         *got = set.skin;
     else if (!strcmp(what, "show_sys"))

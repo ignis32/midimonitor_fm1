@@ -1,0 +1,145 @@
+# Every kind of message at its longest, in every format (K1) and time (K2), C4 and C3 naming (C#-2 the longest
+# name): no log line may reach past the screen (expect maxx) or be cut to fit (expect cuts).
+#   app/build/host/midimon_host app/tests/widths.txt app/build/host
+wait 600
+# every message shown: FILTER, OCT+
+turn PRESET 1
+wait 50
+tap OCT+
+wait 20
+turn PRESET -1
+wait 50
+
+# the first sixteen
+raw DEV 90 01 7F
+raw DEV 80 01 7F
+raw DEV 90 01 00
+raw DEV A1 01 7F
+raw DEV BF 7B 7F
+raw DEV BF 4A 7F
+raw DEV BF 7C 7F
+raw DEV BF 79 7F
+raw DEV CF 7F
+raw DEV DF 7F
+raw DEV EF 00 00
+raw DEV F1 7F
+raw DEV F2 7F 7F
+raw DEV F3 7F
+raw DEV F9
+raw DEV FB
+wait 40
+shot widths_1.png
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K1 1
+wait 60
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K1 1
+wait 60
+spin K2 1
+wait 60
+shot widths_1_both_abs.png
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K1 1
+wait 60
+expect cuts 0
+expect maxx <241
+
+# the next sixteen: running status, faults, SysEx, the other ends of the ranges
+raw TRS 90 01 7F 02 7F
+raw TRS F6 3C
+raw TRS 90 01 90 01 7F
+raw USB F0 7E 7F 06 01 F7
+raw USB F0 00 20 29 02 11 22 33 44 55 66 77 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D 1E 1F 20 21 22 23 24 25 26 27 28 29 2A 2B 2C 2D 2E 2F 30 31 32 33 34 35 36 37 38 39 3A 3B 3C 3D 3E 3F 40 41 42 43 44 45 46 47 48 49 4A 4B 4C 4D 4E 4F 50 51 52 53 54 55 56 57 58 59 5A 5B 5C 5D 5E F7
+raw TRS F0 00 01 72 01 02 90 01 7F
+raw DEV EF 7F 7F
+raw DEV 9F 7F 7F
+raw DEV BF 7F 7F
+raw DEV BF 0B 00
+raw DEV FE
+raw DEV FF
+raw BLE F8
+raw BLE FC
+wait 40
+shot widths_2.png
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K1 1
+wait 60
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K1 1
+wait 60
+spin K2 1
+wait 60
+shot widths_2_both_abs.png
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K1 1
+wait 60
+expect cuts 0
+expect maxx <241
+
+# C3 for note 60: note 1 is C#-2
+tap GLO
+wait 50
+spin K3 1
+wait 50
+tap GLO
+wait 50
+tap GLO
+wait 50
+expect midc 3
+raw DEV 90 01 7F
+raw DEV 80 01 00
+raw DEV 90 01 00
+raw DEV A1 01 7F
+wait 40
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K1 1
+wait 60
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K1 1
+wait 60
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K2 1
+wait 60
+spin K1 1
+wait 60
+expect cuts 0
+expect maxx <241

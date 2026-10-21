@@ -9,4 +9,4 @@
   `usb.c` ([hugelton/felucca-bsp#3](https://github.com/hugelton/felucca-bsp/pull/3)).
 - The idea of running FM-1 firmware in the browser: [Groove OS](https://www.groove-os.com/) by Peter Gombos (no
   code from it).
-- Fonts: Barlow by The Barlow Project Authors and Terminus by Dimitar Toshkov Zhekov (both SIL OFL 1.1).
+- Font: Terminus by Dimitar Toshkov Zhekov (SIL OFL 1.1).

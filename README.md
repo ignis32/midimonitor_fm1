@@ -72,8 +72,9 @@ This repository starts from [fm1-base](https://github.com/charlesvestal/fm1-base
 code was copied in and is developed here (it is not a submodule): MIDIMON's changes to the platform are the MIDI tap
 (`device/midi_tap.c`: every byte from every source, stamped), the two Bluetooth links addressed apart
 (`TO_BLE_P`, `TO_BLE_C`) and the host simulator's `raw` command. fm1-base's files keep their licence (MPL-2.0) and
-their notices: see [LICENSING.md](LICENSING.md) and [CREDITS.md](CREDITS.md). fm1-base's own README is kept in
-[docs/fm1-base-README.md](docs/fm1-base-README.md).
+their notices: see [LICENSING.md](LICENSING.md) and [CREDITS.md](CREDITS.md). Only what MIDIMON uses was kept (not
+fm1-base's template, examples, web pages, backup / mirror / site tools or its own tests); fm1-base's documentation
+is upstream.
 
 ## Licence
 

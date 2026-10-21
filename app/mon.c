@@ -325,22 +325,45 @@ static void ev_hex(const ev_t *e, char *d, int max)
         s_cat(d, "F0 ..");
 }
 
-/* the event in words; ch: its channel 1..16 (0: none) */
-static int ev_human(const ev_t *e, char *d, int midc)
+static int s_len(const char *s)
+{
+    int n = 0;
+    while (s[n])
+        n++;
+    return n;
+}
+
+/* a word after the text if the line has room for it whole (a name: left out rather than cut) */
+static char *s_fit(char *d, char *start, int width, const char *w)
+{
+    if (*w && (d - start) + 1 + s_len(w) <= width) {
+        *d++ = ' ';
+        d = s_cat(d, w);
+    }
+    return d;
+}
+
+/* the event in words, in width characters at most: below 20 (BOTH beside the bytes) the short forms; returns its
+ * channel 1..16 (0: none) */
+static int ev_human(const ev_t *e, char *d, int midc, int width)
 {
     uint32_t st = e->b[0], d1 = e->b[1], d2 = e->b[2];
-    char *s = d;
+    int compact = width < 20;
+    char *s = d, id[4];
     *d = 0;
     switch (e->kind) {
     case EV_SYSEX:
     case EV_SXCUT:
-        d = s_cat(d, e->kind == EV_SYSEX ? "SYSEX " : "SYSEX CUT ");
-        d = s_dec(d, e->sxn, 0);       /* the length first: a narrow line cuts the maker's name, not it */
-        d = s_cat(d, "B ");
-        if (*maker_name(e))
-            s_cat(d, maker_name(e));
-        else if (e->sxk >= 2u)
-            s_hex2(d, e->b[0]);
+        d = s_cat(d, compact ? (e->kind == EV_SYSEX ? "SX " : "SX CUT ")
+                             : (e->kind == EV_SYSEX ? "SYSEX " : "SYSEX CUT "));
+        d = s_dec(d, e->sxn, 0);
+        d = s_cat(d, "B");
+        if (*maker_name(e)) {
+            s_fit(d, s, width, maker_name(e));
+        } else if (e->sxk >= 2u) {
+            s_hex2(id, e->b[0]);
+            s_fit(d, s, width, id);
+        }
         return 0;
     case EV_CUT:
         s_cat(d, "CUT SHORT");
@@ -351,42 +374,49 @@ static int ev_human(const ev_t *e, char *d, int midc)
     case EV_LOST:
         d = s_cat(d, "LOST ");
         d = s_dec(d, (int32_t)e->sxo, 0);
-        s_cat(d, " (FULL)");
+        if (!compact)
+            s_cat(d, " (FULL)");
         return 0;
     }
     if (st < 0xF0u) {
         int ch = (int)(st & 15u) + 1;
         switch (st >> 4) {
         case 0x8:
-            d = s_cat(d, "NOTE OFF ");
-            d = s_note(d, d1, midc);
-            d = s_pad(d, s, 13);
-            s_dec(d, (int32_t)d2, 3);
-            break;
         case 0x9:
-            d = s_cat(d, d2 ? "NOTE ON  " : "NOTE OFF ");
+        case 0xA: {                    /* NOTE ON C4 100 / ON C4 100; a note-on at velocity 0: OFF .. 0* */
+            int on = (st >> 4) == 0x9u && d2, at = (st >> 4) == 0xAu;
+            if (compact)
+                d = s_cat(d, at ? "PAT " : on ? "ON " : "OFF ");
+            else
+                d = s_cat(d, at ? "POLY AT " : on ? "NOTE ON  " : "NOTE OFF ");
             d = s_note(d, d1, midc);
-            d = s_pad(d, s, 13);
-            d = s_dec(d, (int32_t)d2, 3);
-            if (!d2)
-                s_cat(d, "*");         /* a note-on at velocity 0 */
+            if (compact)
+                *d++ = ' ';
+            else
+                d = s_pad(d, s, 14);       /* (NOTE OFF C#-2: 13, and a space) */
+            d = s_dec(d, (int32_t)d2, compact ? 0 : 3);
+            if ((st >> 4) == 0x9u && !d2)
+                s_cat(d, "*");
             break;
-        case 0xA:
-            d = s_cat(d, "POLY AT ");
-            d = s_note(d, d1, midc);
-            d = s_pad(d, s, 13);
-            s_dec(d, (int32_t)d2, 3);
-            break;
-        case 0xB:
-            d = s_cat(d, "CC");
-            d = s_dec(d, (int32_t)d1, 4);
-            *d++ = ' ';
-            d = s_cat(d, cc_name(d1));
-            d = s_pad(d, s, 17);
-            s_dec(d, (int32_t)d2, 3);
+        }
+        case 0xB:                      /* CC 74 CUTOFF 127 / CC74=127 CUTOFF */
+            if (compact) {
+                d = s_cat(d, "CC");
+                d = s_dec(d, (int32_t)d1, 0);
+                *d++ = '=';
+                d = s_dec(d, (int32_t)d2, 0);
+                s_fit(d, s, width, cc_name(d1));
+            } else {
+                d = s_cat(d, "CC");
+                d = s_dec(d, (int32_t)d1, 4);
+                *d++ = ' ';
+                d = s_cat(d, cc_name(d1));
+                d = s_pad(d, s, 17);
+                s_dec(d, (int32_t)d2, 3);
+            }
             break;
         case 0xC:
-            d = s_cat(d, "PROGRAM ");
+            d = s_cat(d, compact ? "PROG " : "PROGRAM ");
             s_dec(d, (int32_t)d1, 0);
             break;
         case 0xD:
@@ -412,7 +442,7 @@ static int ev_human(const ev_t *e, char *d, int midc)
         s_dec(d, (int32_t)(d1 & 15u), 0);
         break;
     case 0xF2:
-        d = s_cat(d, "SONG POS ");
+        d = s_cat(d, compact ? "SPP " : "SONG POS ");
         s_dec(d, (int32_t)(d1 | d2 << 7), 0);
         break;
     case 0xF3:
@@ -427,7 +457,7 @@ static int ev_human(const ev_t *e, char *d, int midc)
     case 0xFE: s_cat(d, "ACT SENSE"); break;
     case 0xFF: s_cat(d, "RESET"); break;
     default:
-        d = s_cat(d, "UNDEFINED ");
+        d = s_cat(d, compact ? "UNDEF " : "UNDEFINED ");
         s_hex2(d, st);
         break;
     }
