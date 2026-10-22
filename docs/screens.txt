@@ -1,0 +1,75 @@
+# The README's screenshots, made in the host simulator: sh build.sh screens (PNGs into docs/)
+wait 1200
+ble connect
+wait 600
+
+# a session: a keyboard on the jack, a DAW on USB, a Bluetooth controller (BLE-C), a computer over Bluetooth (BLE-P)
+midi TRS 90 3C 64
+wait 30
+midi TRS 90 40 5A
+wait 30
+midi TRS 90 43 50
+wait 120
+raw DEV B0 4A 3F
+wait 20
+raw DEV B0 4A 48
+wait 20
+raw DEV E0 00 48
+wait 40
+midi USB C1 05
+wait 20
+raw USB F0 41 10 42 12 40 00 7F 00 41 F7
+wait 40
+raw BLE B9 07 64
+wait 20
+raw BLE 99 24 7F
+wait 30
+midi TRS 80 3C 00
+wait 20
+midi TRS 80 40 00
+wait 20
+midi TRS 80 43 00
+wait 40
+raw DEV D0 40
+wait 20
+midi USB FA
+wait 20
+raw BLE 89 24 00
+wait 20
+midi USB B1 40 7F
+wait 20
+midi TRS 90 45 6E
+wait 400
+shot screen-log.png
+
+# FILTER: channel 10 hidden, active sensing and clock hidden (the defaults)
+turn PRESET 1
+wait 50
+key w9 down
+wait 20
+key w9 up
+wait 50
+shot screen-filter.png
+key w9 down
+wait 20
+key w9 up
+wait 20
+
+# THRU as a Bluetooth MIDI dongle: the jack and USB out over Bluetooth, the Bluetooth controller into USB
+turn PRESET 2
+wait 50
+spin K3 1
+wait 20
+spin SELECT 1
+wait 20
+spin K2 1
+wait 20
+spin K4 1
+wait 50
+midi TRS 90 3C 64
+wait 20
+raw DEV 90 40 64
+wait 20
+midi USB 90 43 64
+wait 400
+shot screen-thru.png

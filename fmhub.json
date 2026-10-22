@@ -1,0 +1,4 @@
+{
+  "what": "A MIDI monitor for USB, the TRS jack and Bluetooth (as device and host at once): hex or words, filters, stats. Its THRU routes, each filtered, make the FM-1 a Bluetooth MIDI dongle.",
+  "kinds": ["other"]
+}

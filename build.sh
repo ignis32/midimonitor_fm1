@@ -2,6 +2,7 @@
 # MIDIMON's builds and tests, one command each:
 #   sh build.sh            the firmware: app/build/midimon.fwsc
 #   sh build.sh test       the host simulator, then every script in app/tests (screens in app/build/host)
+#   sh build.sh screens    the README's screenshots, from docs/screens.txt into docs/
 #   sh build.sh release    the release package of VERSION (this file's neighbour): app/build/midimon-V.fwsc,
 #                          identity FM-1_88XXYYZZ (a version may be given: sh build.sh release 0.2)
 #   sh build.sh version    print VERSION
@@ -25,6 +26,10 @@ test)
         fi
     done
     exit $fail
+    ;;
+screens)
+    python3 tools/build.py app --host
+    app/build/host/midimon_host docs/screens.txt docs
     ;;
 release)
     python3 tools/build.py app --release "${2:-$(cat VERSION)}"

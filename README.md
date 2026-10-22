@@ -5,6 +5,25 @@ that comes in from USB, the TRS jack and Bluetooth, in hex, in words or both, an
 
 **Status: early (0.1).** It runs on the FM-1. Expect changes.
 
+<img src="docs/screen-log.png" width="240" alt="LOG: messages from USB, TRS and both Bluetooth links, in hex and in words"> <img src="docs/screen-filter.png" width="240" alt="FILTER: channels on the white keys, message types on the black keys"> <img src="docs/screen-thru.png" width="240" alt="THRU: the FM-1 as a Bluetooth MIDI dongle">
+
+## A Bluetooth MIDI dongle you already have
+
+With THRU on, the FM-1 is an improvised wireless MIDI interface, in the way of a WIDI or a CME dongle, that also
+shows you what passes through it. It is both a Bluetooth MIDI device (a computer or an iPad connects to it: `BLE-P`)
+and a Bluetooth MIDI host (it connects to a Bluetooth controller or synth itself: `BLE-C`), at the same time. The
+THRU screenshot above is one such setup:
+
+- `TRS → USB, BLE-P`: a hardware synth's MIDI OUT on the jack reaches the computer over the cable and an iPad over
+  Bluetooth.
+- `BLE-C → USB`: a Bluetooth MIDI controller shows up on the computer as a USB MIDI device, with no Bluetooth on
+  the computer at all.
+- `USB → BLE-C`: the DAW plays a Bluetooth synth.
+
+Any source can go to any number of outputs (never back to itself), and each route has its own filter: only channel 1
+notes from the Bluetooth controller, no clock to the iPad, and so on. The FM-1 has no MIDI OUT jack, so the outputs
+are USB, BLE-P and BLE-C.
+
 ## What it does
 
 - **Four sources**, each its own: `USB`, `TRS` (the MIDI IN jack), `BLE-P` (a computer or tablet connected to the
@@ -60,6 +79,7 @@ Releases are built on GitHub by The Firmware Hub's shared workflow
     sh build.sh               # app/build/midimon.fwsc (development, identity FM-1_8800)
     sh build.sh test          # the host simulator and the scripted tests (app/tests), screens in app/build/host
     sh build.sh release       # app/build/midimon-VERSION.fwsc (identity FM-1_88XXYYZZ)
+    sh build.sh screens       # the screenshots above, from docs/screens.txt in the host simulator
 
 It needs JieLi's Linux toolchain and the AC79 SDK (AC79NN_SDK_V1.2.1, commit d179b44): `JIELI_TOOLCHAIN` and
 `AC79_SDK`, or a `local.env` beside `build.sh` that sets them. A release is a tag `vX.Y` matching `VERSION`; the
