@@ -8,6 +8,7 @@
  * The panel:
  *   PRESETS          the page: LOG, FILTER, STATS, THRU, GLO
  *   GLO              the settings: page 1, page 2, then back
+ *   ALGO             what the LOG tab shows: LOG, KEYS, CC, CHANS, CLOCK (views.c)
  *   SELECT           scroll the log back (the view stops; back to the end: live again)
  *   PLAY             pause / go on (the log keeps everything that comes meanwhile)
  *   FX SEL ENV LFO   show / hide USB, TRS, BLE (the computer), DEV (the Bluetooth device)
@@ -42,7 +43,7 @@ typedef struct {
     uint8_t routes[NTAPS];               /* per source: bit OUT_* = it goes out there */
     uint8_t skin;                        /* the colours (view.c SKINS) */
     uint8_t show_sys;                    /* log the platform's own SysEx too (screen reader, remote, updates) */
-    uint8_t rsv[1];
+    uint8_t view;                        /* what the LOG tab shows (VIEW_*: ALGO) */
     uint16_t rt_types[NTAPS][NOUTS];     /* each route's filter: bit TY_* passes (as the display's) */
     uint16_t rt_chans[NTAPS][NOUTS];     /* bit c: channel c + 1 passes */
 } settings_t;
@@ -76,6 +77,7 @@ static struct {
 #include "mon.c"
 static int rt_filtered(uint32_t src, uint32_t o);
 #include "view.c"
+#include "views.c"
 
 /* the filter being edited by the keys: the display's (FILTER), or a route's (THRU, EDIT) */
 static int filter_up(void) { return ui.tab == TAB_FILTER || (ui.tab == TAB_THRU && ui.rt_edit); }
@@ -125,11 +127,13 @@ static void clock_in(const ev_t *e)
 static void mon_event(const ev_t *e)     /* each event as it is logged (mon.c) */
 {
     uint32_t st = e->b[0];
-    if (e->type == TY_CLOCK || e->type == TY_TRANSPORT) {
+    if (e->type == TY_CLOCK || e->type == TY_TRANSPORT)
         clock_in(e);
-        if (e->type == TY_CLOCK)
-            return;
-    }
+    views_clock(e);
+    if (e->type == TY_CLOCK)
+        return;
+    if (ev_shown(e))                     /* (it is the newest in the log: ev_done counted it) */
+        views_event(e, ev_w - 1u);
     if (e->type == TY_ERR)
         ui.err_ms = plat_ms() | 1u;
     if (e->type != TY_ACTIVE)
@@ -261,8 +265,10 @@ static void settings_defaults(void)
 void app_init(void)
 {
     if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC
-        || set.fmt > 2u || set.tmode > 2u || (set.midc != 3u && set.midc != 4u) || set.ble_off > 1u || set.thru > 1u || set.skin >= NSKINS || set.show_sys > 1u)
+        || set.fmt > 2u || set.tmode > 2u || (set.midc != 3u && set.midc != 4u) || set.ble_off > 1u || set.thru > 1u || set.skin >= NSKINS || set.show_sys > 1u
+        || set.view >= NVIEWS)
         settings_defaults();
+    views_clear();
 }
 
 int mon_ble_off(void) { return set.ble_off; }
@@ -296,7 +302,7 @@ static void speak(void)                  /* a screen reader that has just starte
     uint32_t s, o;
     if (ann_on() && ann_where()) {
         d = s_cat(t, APP_NAME ". ");
-        d = s_cat(d, TAB_NAME[ui.tab]);
+        d = s_cat(d, tab_name(ui.tab));
         if (ui.paused)
             d = s_cat(d, ". PAUSED");
         if (ui.tab == TAB_STATS) {       /* in and out, per source and output */
@@ -389,6 +395,7 @@ static void answer(int yes)              /* the question's answer */
         ui.head = 0;
         for (s = 0; s < 128u; s++)
             ui.held[s] = 0;
+        views_clear();
         app_say("LOG", "CLEARED");
     } else if (yes && ui.ask == ASK_BT) {   /* kept with the settings: as it is at the next power-on too */
         set.ble_off = (uint8_t)!set.ble_off;
@@ -516,8 +523,14 @@ static void input(void)
         ui.tab = (uint32_t)((int32_t)ui.tab + (e > 0 ? 1 : -1) + NTABS) % NTABS;
         ui.redraw_all = 1;
     }
+    if ((e = plat_enc(EN_ALGO)) != 0 && !ui.ask) {   /* the LOG tab's views, from any page */
+        set.view = (uint8_t)(((int32_t)set.view + (e > 0 ? 1 : (int32_t)NVIEWS - 1)) % (int32_t)NVIEWS);
+        ui.tab = TAB_LOG;
+        changed();
+        app_say("VIEW", VIEW_NAME[set.view]);
+    }
     sel = plat_enc(EN_SELECT);           /* (read once: the LOG scrolls with it, THRU picks a source) */
-    if (sel && ui.tab == TAB_LOG && !ui.ask)
+    if (sel && ui.tab == TAB_LOG && set.view == VIEW_LOG && !ui.ask)
         scroll_by(-sel);
     if (ui.tab == TAB_GLO && ui.glo_page == 1) {   /* the settings, page 2: the skin, the platform's SysEx */
         if ((e = plat_enc(EN_K1)) != 0 && !ui.ask) {
@@ -707,6 +720,9 @@ void app_frame(void)
     }
     if (ui.tab == TAB_THRU && now - last_body >= 50u)   /* the routes' flashes */
         ui.redraw_all = 1;
+    views_tick(now);
+    if (ui.tab == TAB_LOG && set.view != VIEW_LOG && now - last_body >= 40u)   /* the views move */
+        ui.redraw_all = 1;
     if (ui.redraw_all || sig != foot_sig) {
         foot_sig = sig;
         draw_footer();
@@ -786,6 +802,38 @@ int app_expect(const char *what, int *got)
         *got = (int)ui.thru_row;
     else if (!strcmp(what, "ble_off"))
         *got = set.ble_off;
+    else if (!strcmp(what, "view"))
+        *got = set.view;
+    else if (!strcmp(what, "vk_held")) { /* KEYS: notes held, all channels */
+        int c, n, k = 0;
+        for (c = 0; c < 16; c++)
+            for (n = 0; n < 128; n++)
+                k += vk_vel[c][n] != 0;
+        *got = k;
+    } else if (!strcmp(what, "dup_on"))
+        *got = (int)vis.dup_on;
+    else if (!strcmp(what, "orphan_off"))
+        *got = (int)vis.orphan_off;
+    else if (!strcmp(what, "zoom"))
+        *got = (int)vis.zoom;
+    else if (!strcmp(what, "ncc"))       /* CC: the controllers listed, the newest's number and value */
+        *got = (int)vis.ncc;
+    else if (!strcmp(what, "cc_top") || !strcmp(what, "cc_val")) {   /* the newest */
+        uint32_t k, t = 0;
+        for (k = 1; k < vis.ncc; k++)
+            if (vis.cc[k].ms - vis.cc[t].ms < 0x80000000u)
+                t = k;
+        *got = !vis.ncc ? -1 : what[3] == 't' ? vis.cc[t].cc : vis.cc[t].val;
+    } else if (!strncmp(what, "cc_row", 6))   /* cc_rowN: the controller number on row N */
+        *got = (uint32_t)atoi(what + 6) < vis.ncc ? vis.cc[atoi(what + 6)].cc : -1;
+    else if (!strcmp(what, "bend"))
+        *got = vis.bend[vis.bend_ch];
+    else if (!strcmp(what, "cat"))
+        *got = vis.cat[vis.cat_ch];
+    else if (!strcmp(what, "pos"))       /* CLOCK: the position in clocks; MTC in seconds */
+        *got = (int)vis.pos;
+    else if (!strcmp(what, "mtc_s"))
+        *got = vis.mtc[0] * 3600 + vis.mtc[1] * 60 + vis.mtc[2];
     else
         return 0;
     return 1;

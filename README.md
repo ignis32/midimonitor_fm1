@@ -3,7 +3,7 @@
 A MIDI monitor and thru router for the M-VAVE FM-1, in a green phosphor terminal's look. It shows every MIDI message
 that comes in from USB, the TRS jack and Bluetooth, in hex, in words or both, and passes MIDI on between them.
 
-**Status: early (0.1).** It runs on the FM-1. Expect changes.
+**Status: early (0.2).** It runs on the FM-1. Expect changes.
 
 <img src="docs/screen-log.png" width="240" alt="LOG: messages from USB, TRS and both Bluetooth links, in hex and in words"> <img src="docs/screen-filter.png" width="240" alt="FILTER: channels on the white keys, message types on the black keys"> <img src="docs/screen-thru.png" width="240" alt="THRU: the FM-1 as a Bluetooth MIDI dongle">
 
@@ -33,6 +33,15 @@ are USB, BLE-P and BLE-C.
   active sensing, reset, running status (marked), and the faults: a stray byte, a message cut short, a SysEx without
   its end, messages lost to a full buffer.
 - **LOG**: the last 4096 messages, HEX, HUMAN or BOTH, the time between lines or since power-on; pause, scroll back.
+  ALGO turns what the LOG tab shows:
+  - **KEYS**: the notes held on each channel across all 128 notes, and a keyboard zoomed to where they are, with
+    each note's velocity and its poly pressure. Counts note-ons for notes already held and note-offs for notes not
+    held: where stuck notes come from.
+  - **CC**: pitch bend and channel pressure as graphs over the last seconds, the controllers last moved as bars,
+    by channel and number: a row stays where it is while its knob turns (the one just moved glows).
+  - **CHANS**: each channel's activity per source, and its last message.
+  - **CLOCK**: the tempo coming in, running or stopped, the beat, the position (bar.beat.16th, song position
+    pointer), the clocks' spacing (min, average, max), MIDI timecode put together from its quarter frames.
 - **FILTER**: per source, per channel (white keys), per message type (black keys). Clock and active sensing hidden by
   default, as in MIDI-OX.
 - **STATS**: messages and bytes per source, messages a second, what was lost and sent, Bluetooth's state, the tempo
@@ -52,7 +61,8 @@ are USB, BLE-P and BLE-C.
 | --- | --- |
 | PRESETS | the page: LOG, FILTER, STATS, THRU, GLO |
 | GLO | the settings, page 1, page 2, then back |
-| SELECT | LOG: scroll back (the view stops; back at the end it is live again). THRU: the source |
+| ALGO | what the LOG tab shows: LOG, KEYS, CC, CHANS, CLOCK (from any page) |
+| SELECT | LOG (the log itself): scroll back (the view stops; back at the end it is live again). THRU: the source |
 | PLAY | pause / go on (what comes meanwhile is still logged) |
 | FX, SEL, ENV, LFO | show / hide USB, TRS, BLE-P, BLE-C |
 | K1, K2, K3 | LOG: HEX / HUMAN / BOTH; the time; the scanlines. THRU: the source's route to USB, BLE-P, BLE-C |

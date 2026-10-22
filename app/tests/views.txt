@@ -1,0 +1,155 @@
+# The LOG tab's views (ALGO): KEYS, CC, CHANS, CLOCK
+wait 600
+expect view 0
+
+# KEYS: notes held per channel, a note-on twice, a note-off with no note-on, poly pressure, the zoom following
+midi USB 90 3C 64
+midi USB 90 40 50
+midi TRS 92 43 7F
+midi USB 99 24 70
+wait 20
+expect vk_held 4
+midi USB 90 3C 60
+wait 20
+expect dup_on 1
+midi USB 80 41 00
+wait 20
+expect orphan_off 1
+midi USB A0 3C 50
+midi USB A0 40 7F
+wait 20
+spin ALGO 1
+wait 60
+expect view 1
+expect tab 0
+expect zoom 36
+wait 1400
+shot keys.png
+midi USB 89 24 00
+wait 60
+expect zoom 36
+midi USB 90 54 64
+midi USB 90 5B 64
+wait 60
+expect zoom 60
+shot keys_high.png
+midi USB B0 7B 00
+wait 20
+expect vk_held 1
+midi TRS 82 43 00
+wait 20
+expect vk_held 0
+
+# CC: bend and channel pressure graphs, the controllers newest first
+spin ALGO 1
+wait 60
+expect view 2
+midi USB B0 4A 20
+midi USB B0 07 64
+midi USB B3 01 40
+wait 20
+expect ncc 4
+expect cc_top 1
+midi USB B0 4A 7F
+wait 20
+expect ncc 4
+expect cc_top 74
+expect cc_val 127
+# the rows by channel, then number, and they stay put however the knobs alternate
+expect cc_row0 7
+expect cc_row1 74
+expect cc_row2 123
+expect cc_row3 1
+midi USB B0 07 10
+midi USB B0 4A 11
+midi USB B0 07 12
+midi USB B0 4A 13
+wait 20
+expect cc_row0 7
+expect cc_row1 74
+# full: a new one takes the row untouched longest (CC123, from KEYS), in its place by number
+midi USB B1 10 01
+midi USB B1 11 01
+midi USB B1 12 01
+midi USB B1 13 01
+midi USB B1 14 01
+wait 20
+expect ncc 9
+midi USB B0 00 05
+wait 20
+expect ncc 9
+expect cc_row0 0
+expect cc_row1 7
+expect cc_row2 74
+expect cc_row3 16
+midi USB E0 00 40
+wait 100
+midi USB E0 00 60
+wait 100
+midi USB E0 7F 7F
+wait 200
+midi USB E0 00 20
+wait 200
+midi USB E0 00 40
+wait 50
+expect bend 0
+midi USB D0 30
+wait 100
+midi USB D0 70
+wait 200
+midi USB D0 10
+wait 100
+expect cat 16
+shot cc.png
+
+# CHANS: per channel and source, the last message
+spin ALGO 1
+wait 60
+expect view 3
+raw DEV 95 30 40
+raw BLE BF 40 7F
+midi TRS C2 05
+wait 1400
+shot chans.png
+
+# CLOCK: start, clocks, the position; song position; MTC
+spin ALGO 1
+wait 60
+expect view 4
+raw USB FA
+wait 20
+clock 98 21
+wait 20
+expect pos 97
+raw USB FC
+wait 20
+raw USB F2 10 00
+wait 20
+expect pos 96
+raw USB F1 00
+raw USB F1 11
+raw USB F1 23
+raw USB F1 30
+raw USB F1 42
+raw USB F1 50
+raw USB F1 61
+raw USB F1 72
+wait 20
+expect mtc_s 3723
+raw USB FB
+clock 30 21
+wait 20
+shot clock.png
+
+# around to LOG; ALGO from another page comes back to the LOG tab
+spin ALGO 1
+wait 60
+expect view 0
+turn PRESET 2
+wait 50
+expect tab 2
+spin ALGO -1
+wait 60
+expect tab 0
+expect view 4
+expect dirty 1

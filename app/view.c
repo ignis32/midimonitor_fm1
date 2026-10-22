@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Copyright (C) 2026 ignis32 */
-/* The screens, in a green phosphor terminal's look: the tabs (header), the page (body: LOG, FILTER, STATS) and the
- * sources (footer). Part of app.c, after mon.c. */
+/* The screens, in a green phosphor terminal's look: the tabs (header), the page (body: LOG, FILTER, STATS, THRU, GLO;
+ * the LOG tab's other views in views.c) and the sources (footer). Part of app.c, after mon.c. */
 
 /* the phosphor's shades, per skin (GLO 2, K1): background, faint, dim, mid, lit, glow */
 static const uint16_t SKINS[][6] = {
@@ -32,6 +32,11 @@ static const char *const SKIN_NAME[] = {"GREEN", "AMBER", "CYAN", "WHITE", "RED"
 
 enum { TAB_LOG, TAB_FILTER, TAB_STATS, TAB_THRU, TAB_GLO, NTABS };
 static const char *const TAB_NAME[NTABS] = {"LOG", "FILTER", "STATS", "THRU", "GLO"};
+/* what the LOG tab shows (ALGO; views.c): its name stands in the tab's place */
+enum { VIEW_LOG, VIEW_KEYS, VIEW_CC, VIEW_CHANS, VIEW_CLOCK, NVIEWS };
+static const char *const VIEW_NAME[NVIEWS] = {"LOG", "KEYS", "CC", "CHANS", "CLOCK"};
+static const char *tab_name(uint32_t tab) { return tab == TAB_LOG ? VIEW_NAME[set.view] : TAB_NAME[tab]; }
+static void views_draw(void);
 static const char *const OUT_NAME[NOUTS] = {"USB", "BLE-P", "BLE-C"};
 static const char *const FMT_NAME[3] = {"HEX", "HUMAN", "BOTH"};
 static const char *const TIME_NAME[3] = {"+MS", "ABS", "NO T"};
@@ -59,22 +64,28 @@ static void text_inv(int32_t x, int32_t y, const felucca_font_t *f, const char *
 /* ---------------------------------------------------------------- header --- */
 static void draw_header(void)
 {
-    int32_t x = 4, i;
+    int32_t x = 4, i, gap = 0;
     cv_begin(240, HEAD_H, G_BG);
     cv_rect(0, HEAD_H - 3, 240, 1, G_MID);
+    for (i = 0; i < NTABS; i++)        /* the gaps: as wide as the names leave room for (a long view's name) */
+        gap += text_w(&FONT_S, tab_name((uint32_t)i));
+    gap = (240 - 16 - gap) / (NTABS - 1);
+    if (gap > 12)
+        gap = 12;
     for (i = 0; i < NTABS; i++) {
-        int32_t w = text_w(&FONT_S, TAB_NAME[i]);
+        const char *name = tab_name((uint32_t)i);
+        int32_t w = text_w(&FONT_S, name);
         if (i == (int32_t)ui.tab) {    /* the page we are on: lit, in brackets that stand on the line */
             cv_rect(x - 4, 3, 1, HEAD_H - 5, G_MID);
             cv_rect(x + w + 3, 3, 1, HEAD_H - 5, G_MID);
             cv_rect(x - 4, 3, 3, 1, G_MID);
             cv_rect(x + w + 1, 3, 3, 1, G_MID);
             cv_rect(x - 3, HEAD_H - 3, w + 6, 1, G_BG);
-            cv_text(x, 2, &FONT_S, TAB_NAME[i], G_HI);
+            cv_text(x, 2, &FONT_S, name, G_HI);
         } else {
-            cv_text(x, 2, &FONT_S, TAB_NAME[i], G_DIM);
+            cv_text(x, 2, &FONT_S, name, G_DIM);
         }
-        x += w + 12;
+        x += w + gap;
     }
     scanlines();
     cv_blit(0, 0);
@@ -107,9 +118,16 @@ static void draw_footer(void)
         }
         text_inv(240 - 4 - text_w(&FONT_XS, t), 6, &FONT_XS, t, G_HI);
     } else {
-        d = s_cat(t, FMT_NAME[set.fmt]);
-        *d++ = ' ';
-        d = s_cat(d, TIME_NAME[set.tmode]);
+        if (set.view == VIEW_LOG) {
+            d = s_cat(t, FMT_NAME[set.fmt]);
+            *d++ = ' ';
+            d = s_cat(d, TIME_NAME[set.tmode]);
+        } else {                       /* another view: which, of how many (ALGO turns them) */
+            d = s_cat(t, "ALGO ");
+            d = s_dec(d, (int32_t)set.view + 1, 0);
+            *d++ = '/';
+            d = s_dec(d, NVIEWS, 0);
+        }
         if (set.thru)
             s_cat(d, " THRU");
         cv_text(240 - 4 - text_w(&FONT_XS, t), 6, &FONT_XS, t, G_DIM);
@@ -472,7 +490,9 @@ static void draw_stats(void)
 static void draw_body(void)
 {
     cv_begin(240, BODY_H, G_BG);
-    if (ui.tab == TAB_LOG)
+    if (ui.tab == TAB_LOG && set.view != VIEW_LOG)
+        views_draw();
+    else if (ui.tab == TAB_LOG)
         draw_log();
     else if (ui.tab == TAB_FILTER)
         draw_filter();
