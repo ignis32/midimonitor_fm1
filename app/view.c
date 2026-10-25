@@ -560,20 +560,20 @@ static void draw_glo(void)               /* GLO 1/3 (note 60, the USB port), 2/3
         int pc = batt_percent();
         uint32_t mv = batt_mv();
         uint16_t c = pc < 0 ? G_DIM : pc <= 15 ? G_GLOW : G_HI;
-        cv_text(4, y + 6, &FONT_XS, "BATTERY", G_MID);
+        cv_text(4, y, &FONT_XS, "BATTERY", G_MID);   /* a row as the knobs' (label, value), a bar after it */
         if (pc < 0) {
             s_cat(t, "--");
         } else {
             d = s_dec(t, pc, 0);
             s_cat(d, "%");
         }
-        cv_text(64, y, &FONT_M, t, c);
-        cv_rect(128, y + 5, 104, 14, G_DIM);   /* the bar: an outline, filled to the percentage */
-        cv_rect(129, y + 6, 102, 12, G_BG);
+        cv_text(4 + 14 * CW, y, &FONT_XS, t, c);
+        cv_rect(4 + 19 * CW, y + 2, 104, 8, G_DIM);   /* the bar: an outline, filled to the percentage */
+        cv_rect(5 + 19 * CW, y + 3, 102, 6, G_BG);
         if (pc > 0)
-            cv_rect(130, y + 7, pc, 10, c);
-        y += 28;
-        d = s_cat(t, "~");
+            cv_rect(6 + 19 * CW, y + 4, pc, 4, c);
+        y += 14;
+        d = s_cat(t, " ~");
         d = s_dec(d, (int32_t)(mv / 1000u), 0);
         *d++ = '.';
         d = s_dec(d, (int32_t)(mv % 1000u / 10u), 2);

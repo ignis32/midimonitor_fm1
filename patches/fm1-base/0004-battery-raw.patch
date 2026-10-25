@@ -1,13 +1,42 @@
 The battery's reading for an app: plat_battery_raw() (include/plat.h), the smoothed 10-bit reading on the battery's
 divider that plat_battery's bars come from (device/plat_fm1.c's batt_raw, read ten times a second by the main loop).
 The host simulator gives 640, or what "battery RAW" sets.
-Why MIDIMON needs it: a battery percentage (GLO 1/3), not only the stock firmware's three bars.
+And a fix to that reading's average (device/main_fm1.c): batt_raw + (b - batt_raw) / 16 never moved for a difference
+under 16 (the division rounds it to 0), so the reading stayed near its first value until the next power-on, and the
+bars with it. The average is kept x16 now (batt_q4), so a small change adds up.
+Why MIDIMON needs it: a battery percentage (GLO 1/3) that follows the battery, not only the stock firmware's bars.
 Applies to: fm1-base aa2b3bc, after 0001-0003. Upstream: not offered yet.
+diff --git a/device/main_fm1.c b/device/main_fm1.c
+index fd1aeb3..6b9793e 100644
+--- a/device/main_fm1.c
++++ b/device/main_fm1.c
+@@ -880,8 +880,11 @@ static void fm1_main(void)
+         if (!fm1_an.con && !fm1_an.pend && fm1_ms - batt_t >= 100u) {   /* the battery, ten times a second (plat_battery) */
+             int32_t b = fm1_adc_read(FM1_ADC_BATT);
+             batt_t = fm1_ms;
+-            if (b > 0)
+-                batt_raw = batt_raw ? batt_raw + (b - batt_raw) / 16 : b;
++            if (b > 0) {                            /* a sixteenth of the way each time, kept x16: the plain
++                                                     * (b - batt_raw) / 16 never moved for a difference under 16 */
++                batt_q4 = batt_q4 ? batt_q4 + b - (batt_q4 + 8) / 16 : b * 16;
++                batt_raw = (batt_q4 + 8) / 16;
++            }
+         }
+         fm1b_dbg.stage = 2;                         /* (breadcrumbs: where a watchdog reset found the loop) */
+         ble_poll();                                 /* Bluetooth's tasks, once started */
 diff --git a/device/plat_fm1.c b/device/plat_fm1.c
-index a4f390a..d4f6897 100644
+index a4f390a..9d2904f 100644
 --- a/device/plat_fm1.c
 +++ b/device/plat_fm1.c
-@@ -61,6 +61,7 @@ int plat_battery(void)                           /* (a level moves once the read
+@@ -45,6 +45,7 @@ uint32_t plat_master(void) { return master_pos; }
+ /* the battery: ADC ch3 (its divider), a slow average by the main loop. The stock firmware's thresholds, as X0X, melodee
+  * and dxsloop use them, give 0-3 bars; there is no charger line, so a USB host means power */
+ static int32_t batt_raw;
++static int32_t batt_q4;                          /* its average x16 (main_fm1.c): batt_raw follows it */
+ static int8_t batt_bars = -1;
+ int plat_battery(void)                           /* (a level moves once the reading is 4 past its threshold) */
+ {
+@@ -61,6 +62,7 @@ int plat_battery(void)                           /* (a level moves once the read
          batt_bars--;
      return batt_bars;
  }
