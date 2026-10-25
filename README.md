@@ -10,9 +10,9 @@ that comes in from USB, the TRS jack and Bluetooth, in hex, in words or both, an
 ## A Bluetooth MIDI dongle you already have
 
 With THRU on, the FM-1 is an improvised wireless MIDI interface, in the way of a WIDI or a CME dongle, that also
-shows you what passes through it. It is both a Bluetooth MIDI device (a computer or an iPad connects to it: `BLE-P`)
-and a Bluetooth MIDI host (it connects to a Bluetooth controller or synth itself: `BLE-C`), at the same time. The
-THRU screenshot above is one such setup:
+shows you what passes through it. It plays both Bluetooth roles at once: BLE-Periphery (a computer or an iPad finds
+it as `FM1_MONITOR` and connects to it: `BLE-P`) and BLE-Central (it connects to a Bluetooth controller or synth
+itself: `BLE-C`). The THRU screenshot above is one such setup:
 
 - `TRS → USB, BLE-P`: a hardware synth's MIDI OUT on the jack reaches the computer over the cable and an iPad over
   Bluetooth.
@@ -26,16 +26,20 @@ are USB, BLE-P and BLE-C.
 
 ## What it does
 
-- **Four sources**, each its own: `USB`, `TRS` (the MIDI IN jack), `BLE-P` (a computer or tablet connected to the
-  FM-1 over Bluetooth: the FM-1 is the peripheral) and `BLE-C` (a Bluetooth MIDI device the FM-1 connected to: the
-  FM-1 is the central). Both Bluetooth roles at once.
-- **USB host** (new, not yet tried on hardware): the USB-C port can host a class-compliant USB-MIDI device, a
-  controller or a synth, instead of talking to a computer (GLO, K4; asks first, never kept: every power-on the port
-  is the computer's again, so updates always work). Its MIDI comes in as `USB` (the footer says `HOST`), and USB
-  out, THRU's too, goes to it: a Bluetooth controller (BLE-C) can play a USB synth. Full-speed devices, alone or
-  behind one hub; the FM-1 gives no power on the port, so use a powered hub or an OTG adapter that powers the
-  device. The driver is Adrien Tibi's and Kerem Kilic's, from Melodee, ported to felucca-bsp in its
+- **Four sources**, each its own: `USB`, `TRS` (the MIDI IN jack), `BLE-P` (BLE-Periphery: a computer or tablet
+  connected to the FM-1 over Bluetooth) and `BLE-C` (BLE-Central: a Bluetooth MIDI device the FM-1 connected to).
+  Both Bluetooth roles at once. On USB and on Bluetooth the FM-1 is `FM1_MONITOR`.
+- **USB port: CLIENT or HOST**: CLIENT, the computer's MIDI device, as usual; HOST, the host of a class-compliant
+  USB-MIDI device, a controller or a synth (GLO 1/3, K2; asks first, never kept: every power-on is CLIENT again, so
+  updates always work). A HOST's device comes in as `USB` (the footer says `HOST`), and USB out, THRU's too, goes to
+  it: a Bluetooth controller (BLE-C) can play a USB synth. Full-speed devices, alone or behind one hub; the FM-1
+  gives no power on the port, so use a powered hub or an OTG adapter that powers the device. The driver is Adrien
+  Tibi's and Kerem Kilic's, from Melodee, ported to felucca-bsp in its
   [pull request #7](https://github.com/hugelton/felucca-bsp/pull/7).
+- **Bluetooth** (GLO 2/3): BLE-Periphery on or off; BLE-Central OFF, FIRST (the first MIDI device it sees, and again
+  when that one goes) or CHOOSE (the one chosen from a list that shows the last four digits of each device's address,
+  so two of one name can be told apart); RECONNECT to the chosen one at power-on and when it goes. The radio is off
+  only when both roles are. The page shows both links' state.
 - **Everything as it came**: SysEx (assembled, the maker named, its length), system common, clock and transport,
   active sensing, reset, running status (marked), and the faults: a stray byte, a message cut short, a SysEx without
   its end, messages lost to a full buffer.
@@ -56,10 +60,9 @@ are USB, BLE-P and BLE-C.
 - **THRU**: routes from each source to any of USB, BLE-P and BLE-C, each route with its own filter (channels and
   message types). The FM-1 as a Bluetooth MIDI bridge: a Bluetooth device to the computer over USB, a keyboard on
   the jack to an iPad, and so on. (SysEx goes to USB only, for now.)
-- **GLO**: Bluetooth on or off, connecting to a Bluetooth MIDI device, C3 or C4 for note 60, the USB port a host or
-  the computer's; a second page (GLO
-  again) for the skin (green, amber, cyan, white, red) and whether the FM-1's own SysEx over USB (screen reader,
-  updates) is logged.
+- **GLO**, three pages (GLO turns them): 1/3 C3 or C4 for note 60 and the USB port (CLIENT / HOST); 2/3 Bluetooth;
+  3/3 the skin (green, amber, cyan, white, red) and whether the FM-1's own SysEx over USB (screen reader, updates)
+  is logged.
 - **Lights**: the source buttons flash as messages come in, the keys light with the notes held, PLAY blinks green on
   the beat of a clock coming in and turns red while paused or on an error.
 
@@ -68,17 +71,19 @@ are USB, BLE-P and BLE-C.
 | Control | Does |
 | --- | --- |
 | PRESETS | the page: LOG, FILTER, STATS, THRU, GLO |
-| GLO | the settings, page 1, page 2, then back |
+| GLO | the settings: 1/3, 2/3 (Bluetooth), 3/3, then back |
 | ALGO | what the LOG tab shows: LOG, KEYS, CC, CHANS, CLOCK (from any page) |
-| SELECT | LOG (the log itself): scroll back (the view stops; back at the end it is live again). THRU: the source |
-| PLAY | pause / go on (what comes meanwhile is still logged) |
+| SELECT | LOG (the log itself): scroll back (the view stops; back at the end it is live again). THRU: the source. The device list: move |
+| PLAY | pause / go on (what comes meanwhile is still logged). The device list: look again |
 | FX, SEL, ENV, LFO | show / hide USB, TRS, BLE-P, BLE-C |
-| K1, K2, K3 | LOG: HEX / HUMAN / BOTH; the time; the scanlines. THRU: the source's route to USB, BLE-P, BLE-C |
-| K4 | THRU: thru on / off. GLO: the USB port a USB MIDI host, or the computer's (asks) |
+| K1 | LOG: HEX / HUMAN / BOTH. THRU: the source's route to USB. GLO 1/3: note 60. 2/3: BLE-Periphery on / off. 3/3: the skin |
+| K2 | LOG: the time. THRU: route to BLE-P. GLO 1/3: the USB port, CLIENT / HOST (asks). 2/3: BLE-Central OFF / FIRST / CHOOSE. 3/3: the platform's SysEx |
+| K3 | LOG: the scanlines. THRU: route to BLE-C. GLO 2/3: the device list (BLE-Central CHOOSE), and move in it |
+| K4 | THRU: thru on / off. GLO 2/3: RECONNECT to the chosen device on / off |
 | EDIT | THRU: a route's filter, and back. FILTER: the default filter |
 | HOME | clear the log (asks) |
-| SAVE | keep the settings (lit when something changed) |
-| OCT- / OCT+ | a question's NO / YES. FILTER and a route's filter: nothing / everything |
+| SAVE | keep the settings (lit when something changed; the chosen Bluetooth device is kept at once) |
+| OCT- / OCT+ | a question's NO / YES. The device list: back / connect. FILTER and a route's filter: nothing / everything |
 
 ## Installing
 

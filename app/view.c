@@ -293,23 +293,43 @@ static void draw_filter_of(uint32_t chans, uint32_t types, int route)
 }
 static void draw_filter(void) { draw_filter_of(set.chans, set.types, 0); }
 
-/* Bluetooth's state, three lines from y; returns the y after them */
+static char *addr_tail(char *d, const uint8_t *a)    /* "EE:FF": a Bluetooth address's last four digits */
+{
+    d = s_hex2(d, a[4]);
+    *d++ = ':';
+    return s_hex2(d, a[5]);
+}
+
+/* Bluetooth's state in words (STATS, GLO 2/3): the radio; BLE-P's computer; BLE-C's device */
+static const char *bt_radio_word(void)
+{
+    return !FM1B_BLE ? "NOT BUILT" : plat_ble_state() == BLE_OFF ? "OFF" : plat_ble_state() == BLE_READY ? "ON" :
+           plat_ble_state() == BLE_FAILED ? "FAILED" : "STARTING";
+}
+static const char *bt_p_word(void)
+{
+    return !set.ble_p ? "OFF" : plat_ble_connected() ? "COMPUTER CONNECTED" : plat_ble_linked() ? "COMPUTER LINKED" :
+           plat_ble_state() == BLE_READY ? "WAITING" : "--";
+}
+static const char *bt_c_word(void)       /* (connected: the device's name, from the line below) */
+{
+    static const char *const DEV[] = {"IDLE", "SCANNING", "CONNECTING", "CONNECTING", "CONNECTED"};
+    int st = plat_ble_device();
+    return set.ble_c == BLEC_OFF ? "OFF" : plat_ble_state() != BLE_READY ? "--" :
+           st >= 0 && st <= BLE_DEV_READY ? DEV[st] : "?";
+}
+
+/* Bluetooth's state, three lines from y (STATS: the short pair); returns the y after them */
 static int32_t draw_bt_state(int32_t y)
 {
-    static const char *const DEV[] = {"--", "SCANNING", "CONNECTING", "SEARCHING", "CONNECTED"};
-    int st = plat_ble_device();
     cv_text(4, y, &FONT_XS, "BLUETOOTH", G_MID);
-    cv_text(4 + 11 * CW, y, &FONT_XS, !FM1B_BLE ? "NOT BUILT" : set.ble_off ? "OFF" :
-            plat_ble_state() == BLE_READY ? "ON" : plat_ble_state() == BLE_FAILED ? "FAILED" : "STARTING", G_HI);
+    cv_text(4 + 11 * CW, y, &FONT_XS, bt_radio_word(), G_HI);
     y += 14;
-    cv_text(4, y, &FONT_XS, " COMPUTER", G_DIM);
-    cv_text(4 + 11 * CW, y, &FONT_XS, plat_ble_connected() ? "CONNECTED" : plat_ble_linked() ? "LINKED" : "--", G_HI);
+    cv_text(4, y, &FONT_XS, " BLE-P", G_DIM);
+    cv_text(4 + 11 * CW, y, &FONT_XS, bt_p_word(), G_HI);
     y += 14;
-    cv_text(4, y, &FONT_XS, " DEVICE", G_DIM);
-    if (st == BLE_DEV_READY && *btdev_name())   /* connected: its name (20 at most: it fits from here) */
-        cv_text(4 + 11 * CW, y, &FONT_XS, btdev_name(), G_HI);
-    else
-        cv_text(4 + 11 * CW, y, &FONT_XS, st >= 0 && st <= BLE_DEV_READY ? DEV[st] : "?", G_HI);
+    cv_text(4, y, &FONT_XS, " BLE-C", G_DIM);
+    cv_text(4 + 11 * CW, y, &FONT_XS, plat_ble_device() == BLE_DEV_READY ? ui.cdev_name : bt_c_word(), G_HI);
     return y + 14;
 }
 
@@ -375,7 +395,96 @@ static void draw_thru(void)
 }
 
 /* ------------------------------------------------------------------- GLO --- */
-static void draw_glo2(void)              /* page 2: the look, what the log keeps */
+static void draw_glo_ble(void)           /* GLO 2/3: Bluetooth (ble.c), both roles */
+{
+    static const char *const LABEL[4] = {"K1 BLE-PERIPHERY", "K2 BLE-CENTRAL", "K3 DEVICE", "K4 RECONNECT"};
+    char dev[28], *d;
+    const char *val[4];
+    int32_t y = 2, i;
+    if (set.ble_have) {                  /* the chosen one: its name (14 at most here) and the end of its address */
+        for (i = 0, d = dev; i < 14 && set.ble_name[i]; i++)
+            *d++ = set.ble_name[i];
+        *d++ = ' ';
+        addr_tail(d, set.ble_addr);
+    } else {
+        s_cat(dev, set.ble_c == BLEC_CHOOSE ? "TURN: THE LIST" : "--");
+    }
+    val[0] = set.ble_p ? "ON" : "OFF";
+    val[1] = BLEC_NAME[set.ble_c % 3u];
+    val[2] = dev;
+    val[3] = set.ble_auto ? "ON" : "OFF";
+    for (i = 0; i < 4; i++, y += 15) {
+        cv_text(4, y, &FONT_XS, LABEL[i], G_MID);
+        cv_text(4 + 18 * CW, y, &FONT_XS, val[i], i == 2 && !set.ble_have ? G_DIM : G_HI);
+    }
+    y += 4;
+    cv_rect(4, y, 232, 1, G_FAINT);
+    y += 8;
+    cv_text(4, y, &FONT_XS, "RADIO", G_DIM);
+    cv_text(4 + 15 * CW, y, &FONT_XS, bt_radio_word(), G_HI);
+    y += 14;
+    cv_text(4, y, &FONT_XS, "BLE-PERIPHERY", G_DIM);
+    cv_text(4 + 15 * CW, y, &FONT_XS, bt_p_word(), G_HI);
+    y += 14;
+    cv_text(4, y, &FONT_XS, "BLE-CENTRAL", G_DIM);
+    cv_text(4 + 15 * CW, y, &FONT_XS, bt_c_word(), G_HI);
+    y += 14;
+    if (plat_ble_device() == BLE_DEV_CONNECTING || plat_ble_device() == BLE_DEV_SEARCHING ||
+        plat_ble_device() == BLE_DEV_READY) {   /* the device it is on: name and address's end */
+        d = s_cat(dev, ui.cdev_name);
+        *d++ = ' ';
+        addr_tail(d, ui.cdev_addr);
+        cv_text(4 + 15 * CW, y, &FONT_XS, dev, G_GLOW);
+    }
+    y += 22;
+    cv_text(4, y, &FONT_XS, "FIRST: THE FIRST MIDI DEVICE SEEN", G_FAINT);
+    cv_text(4, y + 13, &FONT_XS, "CHOOSE: THE ONE CHOSEN (K3)", G_FAINT);
+}
+
+/* the device list over GLO 2/3 (ble.c): the scan's devices, the pick lit, the chosen one marked */
+static void draw_picker(void)
+{
+    char t[40], name[21], *d;
+    int n = 0, i, rssi;
+    uint8_t a[6];
+    cv_rect(6, 4, 228, 184, G_BG);
+    cv_rect(6, 4, 228, 1, G_HI);
+    cv_rect(6, 187, 228, 1, G_HI);
+    cv_rect(6, 4, 1, 184, G_HI);
+    cv_rect(233, 4, 1, 184, G_HI);
+    while (n < 8 && plat_ble_found(n, 0, 0))
+        n++;
+    d = s_cat(t, "BLE-CENTRAL: CHOOSE  (");
+    d = s_dec(d, n, 0);
+    s_cat(d, ")");
+    cv_text(12, 9, &FONT_XS, t, G_HI);
+    if (!n)
+        cv_text(14, 40, &FONT_XS, (plat_ms() / 500u) & 1u ? "LOOKING FOR MIDI DEVICES_" : "LOOKING FOR MIDI DEVICES",
+                G_DIM);
+    for (i = ui.pick_top; i < n && i < ui.pick_top + PICK_ROWS; i++) {
+        int32_t y = 28 + (i - ui.pick_top) * 15;
+        plat_ble_found(i, name, &rssi);
+        plat_ble_found_addr(i, a);
+        d = s_cat(t, set.ble_have && !memcmp(a, set.ble_addr, 6) ? "*" : " ");
+        d = s_cat(d, name);
+        d = s_pad(d, t, 22);
+        d = addr_tail(d, a);
+        d = s_dec(d, rssi, 5);
+        if (i == ui.pick)
+            text_inv(12, y, &FONT_XS, t, G_HI);
+        else
+            cv_text(12, y, &FONT_XS, t, G_MID);
+    }
+    if (ui.pick_top)                     /* more above / below */
+        cv_text(222, 28, &FONT_XS, "^", G_DIM);
+    if (ui.pick_top + PICK_ROWS < n)
+        cv_text(222, 28 + (PICK_ROWS - 1) * 15, &FONT_XS, "v", G_DIM);
+    cv_text(12, 146, &FONT_XS, "* THE CHOSEN ONE", G_FAINT);
+    cv_text(12, 158, &FONT_XS, "OCT+ CONNECT  OCT- BACK", G_MID);
+    cv_text(12, 171, &FONT_XS, "PLAY LOOK AGAIN  K3/SELECT MOVE", G_MID);
+}
+
+static void draw_glo2(void)              /* GLO 3/3: the look, what the log keeps */
 {
     int32_t y = 2;
     uint32_t i;
@@ -400,47 +509,36 @@ static void draw_glo2(void)              /* page 2: the look, what the log keeps
     cv_text(4, y + 52, &FONT_XS, "GLO: BACK", G_FAINT);
 }
 
-static void draw_glo(void)
+static void draw_glo(void)               /* GLO 1/3 (note 60, the USB port), 2/3 Bluetooth, 3/3 the look */
 {
-    static const char *const LABEL[4] = {"K1 BLUETOOTH", "K2 DEVICE", "K3 NOTE 60", "K4 USB PORT"};
-    static const char *const USBH[3] = {"COMPUTER", "HOST: WAITING", "HOST: PLAYING"};
-    char name[21];
-    const char *val[4];
-    int32_t y = 2, i, n;
-    cv_text(240 - 4 - 3 * CW, 2, &FONT_XS, ui.glo_page ? "2/2" : "1/2", G_DIM);
+    static const char *const LABEL[2] = {"K1 NOTE 60", "K2 USB PORT"};
+    static const char *const USBH[3] = {"CLIENT", "HOST: WAITING", "HOST: PLAYING"};
+    static const char *const PAGE[3] = {"1/3", "BLUETOOTH 2/3", "3/3"};
+    const char *val[2];
+    int32_t y = 2, i;
+    cv_text(240 - 4 - text_w(&FONT_XS, PAGE[ui.glo_page % 3u]), ui.glo_page == 1u ? 180 : 2, &FONT_XS,
+            PAGE[ui.glo_page % 3u], G_DIM);
+    if (ui.glo_page == 1u) {
+        draw_glo_ble();
+        return;
+    }
     if (ui.glo_page) {
         draw_glo2();
         return;
     }
-    val[0] = !FM1B_BLE ? "NOT BUILT" : set.ble_off ? "OFF" : "ON";
-    val[1] = !FM1B_BLE_CENTRAL || set.ble_off ? "--" : btdev_busy() ? btdev_name() : btdev_count() ? "TURN TO PICK"
-             : "SCANNING..";
-    val[2] = set.midc == 3u ? "C3 (YAMAHA)" : "C4 (ROLAND)";
-    val[3] = USBH[plat_usb_host_state() % 3];
-    for (i = 0; i < 4; i++, y += 15) {
+    val[0] = set.midc == 3u ? "C3 (YAMAHA)" : "C4 (ROLAND)";
+    val[1] = USBH[plat_usb_host_state() % 3];
+    for (i = 0; i < 2; i++, y += 15) {
         cv_text(4, y, &FONT_XS, LABEL[i], G_MID);
         cv_text(4 + 14 * CW, y, &FONT_XS, val[i], G_HI);
     }
-    y += 4;
-    cv_rect(4, y, 232, 1, G_FAINT);
-    y += 6;
-    y = draw_bt_state(y);
-    y += 6;
-    if (FM1B_BLE_CENTRAL && !set.ble_off && !btdev_busy()) {   /* the devices found, the pick lit */
-        cv_text(4, y, &FONT_XS, "MIDI DEVICES AROUND", G_MID);
-        y += 14;
-        n = btdev_count();
-        for (i = 0; i < n && y < BODY_H - LINE_H; i++, y += 13) {
-            int rssi = 0;
-            btdev_found(i, name, &rssi);
-            if (i == btdev_pick() && ui.ask == ASK_CONNECT)
-                text_inv(10, y, &FONT_XS, name, G_HI);
-            else
-                cv_text(10, y, &FONT_XS, name, G_HI);
-        }
-        if (!n)
-            cv_text(10, y, &FONT_XS, (plat_ms() / 500u) & 1u ? "SCANNING_" : "SCANNING", G_DIM);
-    }
+    y += 12;
+    cv_text(4, y, &FONT_XS, "USB PORT", G_MID);
+    cv_text(4, y + 14, &FONT_XS, " CLIENT: A COMPUTER'S MIDI DEVICE", G_DIM);
+    cv_text(4, y + 27, &FONT_XS, " HOST: A USB MIDI DEVICE'S, POWERED", G_DIM);
+    cv_text(4, y + 40, &FONT_XS, "       BY A HUB OR AN OTG ADAPTER", G_DIM);
+    cv_text(4, y + 53, &FONT_XS, " EVERY POWER-ON: CLIENT", G_DIM);
+    cv_text(4, y + 80, &FONT_XS, "GLO: BLUETOOTH, THEN THE LOOK", G_FAINT);
 }
 
 /* ----------------------------------------------------------------- STATS --- */
@@ -505,24 +603,16 @@ static void draw_body(void)
         draw_thru();
     else
         draw_glo();
+    if (ui.tab == TAB_GLO && ui.glo_page == 1u && ui.picker)
+        draw_picker();                 /* the device list, over its page */
     if (ui.ask) {                      /* a question: OCT- NO on the left, OCT+ YES on the right */
-        char q[32] = "", name[21] = "";
-        if (ui.ask == ASK_CLEAR)
+        char q[32] = "", name[28] = "";
+        if (ui.ask == ASK_CLEAR) {
             s_cat(q, "CLEAR THE LOG?");
-        else if (ui.ask == ASK_BT)
-            s_cat(q, set.ble_off ? "BLUETOOTH ON?" : "BLUETOOTH OFF?");
-        else if (ui.ask == ASK_LET_GO)
-            s_cat(q, "DISCONNECT?");
-        else if (ui.ask == ASK_USBH)
-            s_cat(q, plat_usb_host_state() == USBH_OFF ? "USB HOST ON?" : "USB HOST OFF?");
-        else
-            s_cat(q, "CONNECT TO");
-        if (ui.ask == ASK_CONNECT)
-            btdev_found(btdev_pick(), name, 0);
-        else if (ui.ask == ASK_LET_GO)
-            s_cat(name, btdev_name());
-        else if (ui.ask == ASK_USBH)     /* (what the port stops being) */
+        } else if (ui.ask == ASK_USBH) {   /* (and what the port stops being) */
+            s_cat(q, plat_usb_host_state() == USBH_OFF ? "USB PORT: HOST?" : "USB PORT: CLIENT?");
             s_cat(name, plat_usb_host_state() == USBH_OFF ? "DISCONNECTS THE COMPUTER" : "BACK TO THE COMPUTER");
+        }
         cv_rect(20, 60, 200, 64, G_BG);
         cv_rect(20, 60, 200, 1, G_HI);
         cv_rect(20, 123, 200, 1, G_HI);

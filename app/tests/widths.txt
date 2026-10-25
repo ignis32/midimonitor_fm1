@@ -105,7 +105,9 @@ expect maxx <241
 # C3 for note 60: note 1 is C#-2
 tap GLO
 wait 50
-spin K3 1
+spin K1 1
+wait 50
+tap GLO
 wait 50
 tap GLO
 wait 50

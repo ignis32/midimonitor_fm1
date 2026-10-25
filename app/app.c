@@ -18,15 +18,20 @@
  *   FILTER page      white keys the channels, black keys the messages; OCT- none, OCT+ all, EDIT the defaults
  *   THRU page        SELECT a source; K1 K2 K3 its route to USB, BLE-P, BLE-C (any of them, not back to itself);
  *                    K4 thru on / off (the routes kept)
- *   GLO page         K1 Bluetooth on / off (asks), K2 a Bluetooth device (scans while the page is up; turn: asks to
- *                    connect to the one picked, or to let the connected one go), K3 C3 / C4 for note 60, K4 the
- *                    USB-C port a USB MIDI host or the computer's (asks; never kept: every power-on, the computer's;
- *                    a host's device comes in as USB, and USB out, THRU too, goes to it)
- *   GLO page 2       K1 the skin (the colours), K2 the platform's own SysEx over USB logged or not
+ *   GLO 1/3          K1 C3 / C4 for note 60, K2 the USB-C port: CLIENT (the computer's) or HOST of a USB MIDI device
+ *                    (asks; never kept: every power-on, CLIENT; a host's device comes in as USB, and USB out, THRU too,
+ *                    goes to it)
+ *   GLO 2/3          Bluetooth (ble.c): K1 BLE-PERIPHERY on / off, K2 BLE-CENTRAL OFF / FIRST / CHOOSE, K3 the
+ *                    device list (a pop-up: SELECT or K3 moves, OCT+ connects, OCT- closes, PLAY looks again), K4
+ *                    reconnect to the chosen device (at power-on, and when it goes)
+ *   GLO 3/3          K1 the skin (the colours), K2 the platform's own SysEx over USB logged or not
  * The lights: the source buttons flash with what comes in (dim: hidden); the keys light with the notes held (F3..G5,
  * OCT- / OCT+: some below / above); PLAY green on the beat of a clock coming in, red while paused or on an error. */
 
-#define SET_MAGIC 0x4D4F4E33u            /* "MON3": the settings record; another magic loads defaults */
+#define SET_MAGIC 0x4D4F4E34u            /* "MON4": the settings record; another magic loads defaults */
+enum { BLEC_OFF, BLEC_FIRST, BLEC_CHOOSE };   /* BLE-CENTRAL: off; the first MIDI device seen; the one chosen */
+static const char *const BLEC_NAME[3] = {"OFF", "FIRST", "CHOOSE"};
+#define PICK_ROWS 7                      /* the device list's rows on screen (ble.c, view.c) */
 /* thru's outputs, a bit each (settings_t routes) */
 enum { OUT_USB, OUT_BLE_P, OUT_BLE_C, NOUTS };
 static const uint32_t OUT_TO[NOUTS] = {TO_USB, TO_BLE_HOST, TO_BLE_DEV};   /* (BLE-P, BLE-C: fm1-base's links) */
@@ -38,8 +43,8 @@ typedef struct {
     uint8_t midc;                        /* 3 or 4: the octave of note 60 */
     uint8_t scan;                        /* scanlines */
     uint8_t srcs;                        /* bit TAP_*: the sources shown */
-    uint8_t ble_off;                     /* Bluetooth switched off (REC held) */
-    uint16_t types;                      /* bit TY_*: the messages shown */
+    uint8_t ble_p;                       /* BLE-PERIPHERY: a computer may find and connect to the FM-1 */
+    uint16_t types;                     /* bit TY_*: the messages shown */
     uint16_t chans;                      /* bit c: channel c + 1 shown */
     uint8_t thru;                        /* thru on: what comes in goes out again by routes (thru()) */
     uint8_t routes[NTAPS];               /* per source: bit OUT_* = it goes out there */
@@ -48,15 +53,20 @@ typedef struct {
     uint8_t view;                        /* what the LOG tab shows (VIEW_*: ALGO) */
     uint16_t rt_types[NTAPS][NOUTS];     /* each route's filter: bit TY_* passes (as the display's) */
     uint16_t rt_chans[NTAPS][NOUTS];     /* bit c: channel c + 1 passes */
+    uint8_t ble_c;                       /* BLE-CENTRAL: BLEC_* */
+    uint8_t ble_auto;                    /* reconnect to the chosen device: at power-on, and when it goes */
+    uint8_t ble_have;                    /* a device was chosen (ble_addr, ble_name) */
+    uint8_t ble_addr[6];                 /* its address, as written (AA:BB:..) */
+    char ble_name[21];
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
 
 /* the questions (OCT+ yes, OCT- no) */
-enum { ASK_NONE, ASK_CLEAR, ASK_BT, ASK_CONNECT, ASK_LET_GO, ASK_USBH };
+enum { ASK_NONE, ASK_CLEAR, ASK_USBH };
 
 static struct {
-    uint32_t tab, tab_before_glo, glo_page;   /* GLO: page 0 (Bluetooth, note 60) or 1 (the look, the log) */
+    uint32_t tab, tab_before_glo, glo_page;   /* GLO: page 0 (note 60, USB), 1 (Bluetooth), 2 (the look, the log) */
     uint8_t paused, ask, redraw_all;
     uint32_t scroll, head;               /* lines back from the end; the end the view stays at while it stops */
     uint32_t act[NTAPS];                 /* when each source last sent something (not clock / active sensing) */
@@ -74,12 +84,21 @@ static struct {
     uint8_t rt_edit, rt_out;             /* THRU: a route's filter up (EDIT), its output */
     uint32_t route_ms[NTAPS][NOUTS];     /* when each route last passed something on */
     uint32_t routed[NTAPS];              /* messages each source passed on */
+    /* Bluetooth (ble.c) */
+    uint8_t picker, pick, pick_top;      /* the device list up; the one picked; the first row shown */
+    uint8_t ble_try;                     /* BLE-CENTRAL CHOOSE: connect to the chosen device when the scan sees it */
+    uint8_t ble_pc;                      /* a computer connected (BLE-PERIPHERY), as last seen */
+    int ble_dev;                         /* plat_ble_device(), as last seen */
+    uint32_t ble_wait;                   /* no connecting before this (after a failure) */
+    char cdev_name[21];                  /* the device connecting or connected */
+    uint8_t cdev_addr[6];
 } ui;
 
 #include "mon.c"
 static int rt_filtered(uint32_t src, uint32_t o);
 #include "view.c"
 #include "views.c"
+#include "ble.c"
 
 /* the filter being edited by the keys: the display's (FILTER), or a route's (THRU, EDIT) */
 static int filter_up(void) { return ui.tab == TAB_FILTER || (ui.tab == TAB_THRU && ui.rt_edit); }
@@ -253,6 +272,9 @@ static void settings_defaults(void)
     set.scan = 1;
     set.routes[TAP_TRS] = 1u << OUT_USB;      /* a keyboard on the jack to the computer */
     set.routes[TAP_BLE_DEV] = 1u << OUT_USB;  /* a Bluetooth device to the computer (as a WIDI does) */
+    set.ble_p = 1;                            /* a computer may connect; the device is the one chosen, kept */
+    set.ble_c = BLEC_CHOOSE;
+    set.ble_auto = 1;
     {
         uint32_t s, o;
         for (s = 0; s < NTAPS; s++)
@@ -267,13 +289,14 @@ static void settings_defaults(void)
 void app_init(void)
 {
     if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC
-        || set.fmt > 2u || set.tmode > 2u || (set.midc != 3u && set.midc != 4u) || set.ble_off > 1u || set.thru > 1u || set.skin >= NSKINS || set.show_sys > 1u
-        || set.view >= NVIEWS)
+        || set.fmt > 2u || set.tmode > 2u || (set.midc != 3u && set.midc != 4u) || set.thru > 1u || set.skin >= NSKINS
+        || set.show_sys > 1u || set.view >= NVIEWS || set.ble_p > 1u || set.ble_c > BLEC_CHOOSE || set.ble_auto > 1u
+        || set.ble_have > 1u)
         settings_defaults();
+    set.ble_name[sizeof set.ble_name - 1] = 0;
     views_clear();
+    ble_apply(1);
 }
-
-int mon_ble_off(void) { return set.ble_off; }
 
 /* ------------------------------------------------------------- words --- */
 void app_say(const char *a, const char *b)
@@ -363,34 +386,9 @@ static void scroll_by(int32_t d)         /* + older, - newer */
     ui.redraw_all = 1;
 }
 
-/* GLO: Bluetooth on / off (K1, asks first), a Bluetooth device (K2: picks one of those found, asks to connect;
- * connected, asks to let it go) */
-static void glo_bt_knob(void)
-{
-    if (FM1B_BLE)
-        ui.ask = ASK_BT;
-    ui.redraw_all = 1;
-}
-static void glo_device_knob(int32_t e)
-{
-    if (!FM1B_BLE_CENTRAL || set.ble_off)
-        return;
-    if (btdev_busy()) {
-        ui.ask = ASK_LET_GO;
-    } else if (btdev_count()) {
-        if (ui.ask == ASK_CONNECT)       /* the question up: the knob moves the pick */
-            btdev_choose(btdev_pick() + e);
-        ui.ask = ASK_CONNECT;
-    } else {
-        app_say("NO DEVICES", "FOUND YET");
-    }
-    ui.redraw_all = 1;
-}
-
 static void answer(int yes)              /* the question's answer */
 {
     uint32_t s;
-    int ev;
     if (yes && ui.ask == ASK_CLEAR) {
         mon_clear();
         ui.scroll = 0;
@@ -399,16 +397,8 @@ static void answer(int yes)              /* the question's answer */
             ui.held[s] = 0;
         views_clear();
         app_say("LOG", "CLEARED");
-    } else if (yes && ui.ask == ASK_BT) {   /* kept with the settings: as it is at the next power-on too */
-        set.ble_off = (uint8_t)!set.ble_off;
-        plat_ble_enable(!set.ble_off);
-        plat_store_save(OBJ_SETTINGS, &set, sizeof set);
-        app_say("BLUETOOTH", set.ble_off ? "OFF" : "ON");
-    } else if (yes && ui.ask == ASK_USBH) {   /* never kept: every power-on is a device (the computer's, updates) */
+    } else if (yes && ui.ask == ASK_USBH) {   /* never kept: every power-on is a CLIENT (the computer's, updates) */
         plat_usb_host(plat_usb_host_state() == USBH_OFF);
-    } else if (yes && (ui.ask == ASK_CONNECT || ui.ask == ASK_LET_GO)) {
-        ev = btdev_save();
-        app_say(btdev_word(ev), ev == BTDEV_CONNECTING ? btdev_name() : "");
     }
     ui.ask = ASK_NONE;
     ui.redraw_all = 1;
@@ -422,13 +412,15 @@ static void button(uint32_t k)
             answer(k == B_OCTUP);
         return;
     }
+    if (picker_button(k))                /* the device list up: OCT+ OCT- PLAY are its (ble.c) */
+        return;
     if (k == B_GLO) {                    /* the settings' pages in turn, then back */
         if (ui.tab != TAB_GLO) {
             ui.tab_before_glo = ui.tab;
             ui.tab = TAB_GLO;
             ui.glo_page = 0;
-        } else if (ui.glo_page == 0) {
-            ui.glo_page = 1;
+        } else if (ui.glo_page < 2u) {
+            ui.glo_page++;
         } else {
             ui.tab = ui.tab_before_glo == TAB_GLO ? TAB_LOG : ui.tab_before_glo;
             ui.glo_page = 0;
@@ -536,7 +528,17 @@ static void input(void)
     sel = plat_enc(EN_SELECT);           /* (read once: the LOG scrolls with it, THRU picks a source) */
     if (sel && ui.tab == TAB_LOG && set.view == VIEW_LOG && !ui.ask)
         scroll_by(-sel);
-    if (ui.tab == TAB_GLO && ui.glo_page == 1) {   /* the settings, page 2: the skin, the platform's SysEx */
+    if (ui.tab == TAB_GLO && ui.glo_page == 1) {   /* GLO 2/3: Bluetooth (ble.c); SELECT moves the device list too */
+        static const uint8_t K[4] = {EN_K1, EN_K2, EN_K3, EN_K4};
+        int k;
+        if (ui.picker && sel && !ui.ask)
+            picker_move(sel);
+        for (k = 0; k < 4; k++)
+            if ((e = plat_enc(K[k])) != 0 && !ui.ask && (!ui.picker || k == 2))
+                ble_knob(k + 1, e);
+        return;
+    }
+    if (ui.tab == TAB_GLO && ui.glo_page == 2) {   /* GLO 3/3: the skin, the platform's SysEx */
         if ((e = plat_enc(EN_K1)) != 0 && !ui.ask) {
             set.skin = (uint8_t)(((int32_t)set.skin + (e > 0 ? 1 : (int32_t)NSKINS - 1)) % (int32_t)NSKINS);
             changed();
@@ -550,19 +552,17 @@ static void input(void)
         plat_enc(EN_K4);
         return;
     }
-    if (ui.tab == TAB_GLO) {             /* the settings: Bluetooth, the device, note 60 */
-        if (plat_enc(EN_K1) != 0 && !ui.ask)
-            glo_bt_knob();
-        if ((e = plat_enc(EN_K2)) != 0 && (!ui.ask || ui.ask == ASK_CONNECT))
-            glo_device_knob(e);
-        if (plat_enc(EN_K3) != 0 && !ui.ask) {
+    if (ui.tab == TAB_GLO) {             /* GLO 1/3: note 60, the USB port */
+        if (plat_enc(EN_K1) != 0 && !ui.ask) {
             set.midc = set.midc == 3u ? 4u : 3u;
             changed();
         }
-        if (plat_enc(EN_K4) != 0 && !ui.ask) {   /* the USB-C port: the computer's, or a controller's host (asks) */
+        if (plat_enc(EN_K2) != 0 && !ui.ask) {   /* the USB-C port: CLIENT (the computer's) or HOST (asks) */
             ui.ask = ASK_USBH;
             ui.redraw_all = 1;
         }
+        plat_enc(EN_K3);
+        plat_enc(EN_K4);
         return;
     }
     if (ui.tab == TAB_THRU) {            /* SELECT the source; K1 K2 K3 its route to USB, BLE-P, BLE-C; K4 thru on */
@@ -652,11 +652,13 @@ static void lights(void)
                 mk |= 1u << (n - 53u);
         }
     }
-    if (ui.ask)
+    if (ui.ask || ui.picker)             /* a question, the device list: OCT- no / back, OCT+ yes / connect */
         bb |= 1u << B_OCTDN | 1u << B_OCTUP;
-    if (ui.paused || ui.scroll || (ui.err_ms && now - ui.err_ms < 150u))
+    if (ui.picker)                       /* (PLAY: look again) */
+        bb |= LED_PLAY_GREEN;
+    else if (ui.paused || ui.scroll || (ui.err_ms && now - ui.err_ms < 150u))
         bb |= 1u << B_PLAY;              /* red */
-    if (!ui.paused && !ui.scroll) {      /* green: the beat of a clock coming in */
+    if (!ui.picker && !ui.paused && !ui.scroll) {   /* green: the beat of a clock coming in */
         if (ui.beat_ms && now - ui.clk_ms < 500u && now - ui.beat_ms < 90u)
             bb |= LED_PLAY_GREEN;
         else
@@ -691,24 +693,22 @@ void app_frame(void)
     input();
     speak();
     {   /* the USB host: what happened, in words */
-        static const char *const W[] = {"", "HOST ON", "HOST OFF", "MIDI DEVICE IN", "NO MIDI DEVICE",
+        static const char *const W[] = {"", "PORT: HOST", "PORT: CLIENT", "MIDI DEVICE IN", "NO MIDI DEVICE",
                                         "LOW SPEED: NO", "DEVICE LOST"};
         int ev;
         while ((ev = plat_usb_host_event()) != USBH_EV_NONE)
             app_say("USB", ev < (int)(sizeof W / sizeof W[0]) ? W[ev] : "?");
     }
-    if (FM1B_BLE) {                      /* GLO up: the scan for devices; what happened, in words */
+    if (FM1B_BLE) {                      /* Bluetooth: scanning, connecting, what happened (ble.c) */
         static int found;
-        int ev;
-        btdev_page(ui.tab == TAB_GLO && ui.glo_page == 0 && !set.ble_off);
-        if (btdev_count() != found) {
-            found = btdev_count();
+        if (ui.picker && !(ui.tab == TAB_GLO && ui.glo_page == 1)) {
+            ui.picker = 0;               /* (the device list belongs to its page) */
             ui.redraw_all = 1;
         }
-        while ((ev = btdev_event()) != BTDEV_NONE) {
-            app_say(ev == BTDEV_COMPUTER || ev == BTDEV_COMPUTER_GONE ? "BLE" : "DEVICE", btdev_word(ev));
-            if (ui.ask == ASK_LET_GO || ui.ask == ASK_CONNECT)
-                ui.ask = ASK_NONE;       /* (what it asked about changed under it) */
+        ble_task();
+        if (ble_count() != found) {      /* the list and the page follow the scan */
+            found = ble_count();
+            ui.redraw_all = 1;
         }
     }
     if (now - ui.rate_t >= 1000u) {      /* events a second */
@@ -814,8 +814,22 @@ int app_expect(const char *what, int *got)
         *got = set.routes[atoi(what + 5) % NTAPS];
     else if (!strcmp(what, "thru_row"))
         *got = (int)ui.thru_row;
-    else if (!strcmp(what, "ble_off"))
-        *got = set.ble_off;
+    else if (!strcmp(what, "ble_p"))     /* Bluetooth: BLE-P on, BLE-C's mode (0 OFF 1 FIRST 2 CHOOSE), RECONNECT */
+        *got = set.ble_p;
+    else if (!strcmp(what, "ble_c"))
+        *got = set.ble_c;
+    else if (!strcmp(what, "ble_auto"))
+        *got = set.ble_auto;
+    else if (!strcmp(what, "ble_have"))  /* a device chosen; the last digit of its address */
+        *got = set.ble_have;
+    else if (!strcmp(what, "ble_addr5"))
+        *got = set.ble_addr[5];
+    else if (!strcmp(what, "picker"))    /* the device list up; the row picked */
+        *got = ui.picker;
+    else if (!strcmp(what, "pick"))
+        *got = ui.pick;
+    else if (!strcmp(what, "ble_on"))    /* the radio on */
+        *got = plat_ble_state() != BLE_OFF;
     else if (!strcmp(what, "view"))
         *got = set.view;
     else if (!strcmp(what, "usbh"))      /* the USB port: 0 the computer's, 1 a host waiting, 2 a controller in */

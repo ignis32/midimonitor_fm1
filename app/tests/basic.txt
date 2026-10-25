@@ -173,45 +173,107 @@ expect chans 65535
 turn PRESET -1
 wait 50
 
-# GLO: the settings page (and back to where we were)
+# GLO 1/3: note 60 (K1), the USB port (K2: usbhost.txt)
 tap GLO
 wait 50
 expect tab 4
-spin K3 1
+expect glo_page 0
+spin K1 1
 wait 20
 expect midc 3
-spin K3 1
+spin K1 1
 wait 20
 expect midc 4
-
-# Bluetooth: off and on again (K1 asks), then a device (K2 picks it and asks)
-spin K1 1
-wait 20
-expect ask 2
-tap OCT+
-wait 20
-expect ble_off 1
-spin K1 1
-wait 20
-tap OCT+
-wait 1500
-expect ble_off 0
-wait 1000
 shot glo.png
+
+# GLO 2/3, Bluetooth: BLE-P on, BLE-C CHOOSE, RECONNECT on by default
+tap GLO
+wait 50
+expect glo_page 1
+expect ble_p 1
+expect ble_c 2
+expect ble_auto 1
+expect ble_have 0
+expect ble_on 1
+shot glo_ble.png
+# the device list (K3): three devices around; SELECT and K3 move, PLAY looks again, OCT+ connects
+ble devices 3
+spin K3 1
+wait 700
+expect picker 1
+shot ble_list.png
+spin SELECT 2
+wait 20
+expect pick 2
+spin K3 -1
+wait 20
+expect pick 1
+tap PLAY
+wait 20
+expect pick 0
+expect paused 0
+wait 700
+spin K3 1
+wait 20
+expect pick 1
+tap OCT+
+wait 20
+expect picker 0
+expect ble_have 1
+expect ble_addr5 1
+wait 1000
+expect ble_dev 4
+shot ble_connected.png
+# it goes: RECONNECT finds it again by its address
+ble lose
+wait 2500
+expect ble_dev 4
+# RECONNECT off: it stays gone
+spin K4 1
+wait 20
+expect ble_auto 0
+ble lose
+wait 2500
+expect ble_dev 0
+spin K4 1
+wait 20
+# OCT- closes the list without a change
+spin K3 1
+wait 700
+expect picker 1
+tap OCT-
+wait 20
+expect picker 0
+# BLE-C OFF; BLE-P off too: the radio off; BLE-P on again: on
 spin K2 1
 wait 20
-expect ask 3
-shot glo_ask.png
-tap OCT+
-wait 600
+expect ble_c 0
+expect ble_on 1
+spin K1 1
+wait 20
+expect ble_p 0
+expect ble_on 0
+spin K3 1
+wait 20
+expect picker 0
+spin K1 1
+wait 1500
+expect ble_on 1
+# FIRST: the first device seen, at once
+spin K2 1
+wait 2500
+expect ble_c 1
 expect ble_dev 4
-shot glo_connected.png
+spin K2 1
+wait 20
+expect ble_c 2
+expect ble_dev 4
 
-# GLO again: its page 2 (the skin, the platform's SysEx); again: back
+# GLO 3/3: the skin, the platform's SysEx; GLO again: back
 tap GLO
 wait 50
 expect tab 4
-expect glo_page 1
+expect glo_page 2
 spin K1 1
 wait 50
 expect skin 1

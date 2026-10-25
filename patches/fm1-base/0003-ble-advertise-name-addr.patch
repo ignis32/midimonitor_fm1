@@ -1,0 +1,323 @@
+Bluetooth: advertising on or off (plat_ble_advertise), the advertised name from fm1.toml, and a found device's
+address (plat_ble_found_addr).
+- plat_ble_advertise(on): a computer may find and connect to the FM-1 (BLE-Periphery), or not; off lets a connected
+  computer go and keeps the device's link (BLE-Central). ble/midi/le_midi.c keeps the wish (adv_wanted), so none of
+  the places that advertise again after a link undoes it. From ignis32's tornado (its patches/fm1-base/0003).
+- fm1.toml ble_name = "...": the name advertised and in the GAP name (FM1B_BLE_NAME; "FM-1" without it), 1..29
+  printable ASCII characters. The advertising packet holds 8 beside the flags and the MIDI service's UUID: a longer
+  name goes there shortened (type 0x08) and whole in the scan response (0x09). tornado's took 8 at most.
+- plat_ble_found_addr(i, addr): the address of device i of the scan, as written (most significant byte first), for a
+  list that tells devices of one name apart and for reconnecting to the one chosen. The host simulator: "ble devices
+  N" (N stand-ins, C0:FF:EE:00:10:0i) and "ble lose" (the connected one goes away).
+Why MIDIMON needs it: its BLUETOOTH page (BLE-P and BLE-C apart, a device list with addresses, reconnecting to the
+chosen device), and the name FM1_MONITOR on Bluetooth as on USB.
+Applies to: fm1-base aa2b3bc, after 0001 and 0002. Upstream: not offered yet.
+diff --git a/ble/midi/le_midi.c b/ble/midi/le_midi.c
+index 16afae8..706226c 100644
+--- a/ble/midi/le_midi.c
++++ b/ble/midi/le_midi.c
+@@ -7,8 +7,8 @@
+  * The rest is MPL-2.0 (LICENSE). */
+ /* BLE MIDI peripheral on JieLi's BLE stack: the MIDI service (03B80E5A-EDE8-4B33-A751-6CE34EC4C700) with
+  * its one characteristic (7772E5DB-3868-4112-A1A9-F2669D106BF3: read, write without response, notify),
+- * advertised with the service UUID and the name "FM-1". Built on the structure of the SDK's
+- * le_trans_data.c (its event handling and connection-parameter requests), without its test profile.
++ * advertised with the service UUID and a name (fm1.toml ble_name: "FM-1" by default). Built on the structure of the
++ * SDK's le_trans_data.c (its event handling and connection-parameter requests), without its test profile.
+  *
+  *   bt_ble_init()                 the stack is up (BT_STATUS_INIT_OK): profile, advertising
+  *   ble_midi_send_many(link, pkts, ms, n)   USB-MIDI packets (cin | status << 8 | d1 << 16 | d2 << 24), each
+@@ -79,7 +79,14 @@ static const uint8_t profile_data[] = {
+ #define ATT_RAM_BUFSIZE      (ATT_CTRL_BLOCK_SIZE + ATT_LOCAL_MTU_SIZE + ATT_SEND_CBUF_SIZE)
+ static u8 att_ram_buffer[ATT_RAM_BUFSIZE] __attribute__((aligned(4)));
+ 
+-static const char gap_device_name[] = "FM-1";
++#ifndef FM1B_BLE_NAME
++#define FM1B_BLE_NAME "FM-1"                    /* fm1.toml ble_name (tools/build.py): the name it advertises */
++#endif
++static const char gap_device_name[] = FM1B_BLE_NAME;
++typedef char ble_name_fits[sizeof gap_device_name - 1 <= 29 ? 1 : -1];  /* (the scan response's room) */
++#define ADV_NAME_MAX 8u                          /* the advertising packet's room for it: flags and the MIDI service's
++                                                  * 128-bit UUID take the rest; a longer name goes there shortened, and
++                                                  * whole in the scan response */
+ #if BLE_MIDI_CENTRAL
+ #define ROLE_SERVER 0                            /* the SDK's MULTI_ROLE_SLAVE / MASTER */
+ #define ROLE_CLIENT 1
+@@ -94,6 +101,7 @@ static const char gap_device_name[] = "FM-1";
+ static volatile hci_con_handle_t con_handle;
+ static u8 adv_data[ADV_RSP_PACKET_MAX], scan_rsp_data[ADV_RSP_PACKET_MAX];
+ static u8 ble_work_state, adv_ctrl_en;
++static volatile u8 adv_wanted = 1;              /* the player's: advertise, a computer may connect (ble_midi_advertise) */
+ static OS_MUTEX mutex;
+ 
+ /* connection parameters: ask for a short interval (MIDI latency and jitter): Apple's 11.25-15 ms for
+@@ -422,6 +430,16 @@ int ble_midi_found(int i, char *name, int *rssi)   /* device i of the scan: 0 wh
+         *rssi = mc_dev[i].rssi;
+     return 1;
+ }
++int ble_midi_found_addr(int i, u8 *addr)         /* device i's address, as written (the most significant byte first;
++                                                  * the stack keeps it the other way round) */
++{
++    u8 k;
++    if (i < 0 || i >= mc_n)
++        return 0;
++    for (k = 0; k < 6u; k++)
++        addr[k] = mc_dev[i].addr[5u - k];
++    return 1;
++}
+ int ble_midi_connect(int i)                      /* connect to device i of the scan */
+ {
+     if (i < 0 || i >= mc_n || mc_handle || (mc_state != BLE_MC_SCANNING && mc_state != BLE_MC_OFF))
+@@ -584,7 +602,12 @@ static int make_set_adv_data(void)
+     u8 offset = 0, *buf = adv_data;
+     offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_FLAGS, 0x06, 1);
+     offset += make_eir_packet_data(&buf[offset], offset, HCI_EIR_DATATYPE_COMPLETE_128BIT_SERVICE_UUIDS, (void *)svc, 16);
+-    offset += make_eir_packet_data(&buf[offset], offset, HCI_EIR_DATATYPE_COMPLETE_LOCAL_NAME, (void *)gap_device_name, sizeof gap_device_name - 1);
++    if (sizeof gap_device_name - 1u <= ADV_NAME_MAX)
++        offset += make_eir_packet_data(&buf[offset], offset, HCI_EIR_DATATYPE_COMPLETE_LOCAL_NAME, (void *)gap_device_name,
++                                       sizeof gap_device_name - 1);
++    else
++        offset += make_eir_packet_data(&buf[offset], offset, HCI_EIR_DATATYPE_SHORTENED_LOCAL_NAME,
++                                       (void *)gap_device_name, ADV_NAME_MAX);
+     if (offset > ADV_RSP_PACKET_MAX)
+         return -1;
+     log_info("adv_data(%d)\n", offset);
+@@ -607,7 +630,8 @@ static void advertisements_setup_init(void)
+ static int set_adv_enable(void *priv, u32 en)
+ {
+     ble_state_e next_state = en ? BLE_ST_ADV : BLE_ST_IDLE, cur_state;
+-    if ((!adv_ctrl_en && en) || (en && con_handle))
++    if ((!adv_ctrl_en && en) || (en && con_handle) || (en && !adv_wanted))   /* (every place that advertises again
++                                                                              * keeps to the player's wish) */
+         return APP_BLE_OPERATION_ERROR;
+     cur_state = get_ble_work_state();
+     switch (cur_state) {
+@@ -829,3 +853,20 @@ void bt_ble_exit(void)
+     os_mutex_post(&mutex);
+ }
+ u16 bt_ble_is_connected(void) { return con_handle; }
++
++/* Advertise (a computer may find and connect to the FM-1) or not, as the player asks; off lets a connected computer
++ * go, and the central's link (BLE_MIDI_CENTRAL) stays. ready: the stack is up (else the wish waits for its start). */
++void ble_midi_advertise(int on, int ready)
++{
++    adv_wanted = (u8)(on != 0);
++    if (!ready)
++        return;
++    if (on) {
++        os_mutex_pend(&mutex, 0);
++        adv_ctrl_en = 1;
++        bt_ble_adv_enable(1);
++        os_mutex_post(&mutex);
++    } else
++        bt_ble_exit();
++}
++const char *ble_midi_name(void) { return gap_device_name; }
+diff --git a/device/ble_none.c b/device/ble_none.c
+index 3d1cfe8..66178bb 100644
+--- a/device/ble_none.c
++++ b/device/ble_none.c
+@@ -16,7 +16,9 @@ int plat_ble_linked(void) { return 0; }
+ void plat_ble_start(void) {}
+ void plat_ble_scan(int on) { (void)on; }
+ int plat_ble_found(int i, char *name, int *rssi) { (void)i, (void)name, (void)rssi; return 0; }
++int plat_ble_found_addr(int i, uint8_t addr[6]) { (void)i, (void)addr; return 0; }
+ int plat_ble_connect(int i) { (void)i; return -1; }
+ void plat_ble_disconnect(void) {}
+ int plat_ble_device(void) { return BLE_DEV_OFF; }
+ void plat_ble_enable(int on) { (void)on; }
++void plat_ble_advertise(int on) { (void)on; }
+diff --git a/device/radio.c b/device/radio.c
+index 9aefc01..075c5ae 100644
+--- a/device/radio.c
++++ b/device/radio.c
+@@ -195,6 +195,7 @@ static char *put_dec(char *b, uint32_t v)
+ /* at boot: what ended the last run. The crash note: the fault's pc, vector and debug register, its
+  * return address and how long Bluetooth had run, and the core's last four branches (ETM). */
+ static uint8_t radio_last_bad;                      /* the last BT run ended in a crash or a watchdog reset */
++static uint8_t ble_adv_off;                         /* the player has advertising off (plat_ble_advertise) */
+ static void radio_boot_note(void)
+ {
+     char b[40];
+@@ -536,7 +537,16 @@ void shim_bt_event(int from, const void *event, int len)
+     (void)len;
+     ble_events++;
+     if (from == 3 && e && e->event == 3 && ble_state == BLE_STARTING) {   /* BT_EVENT_FROM_CON, BT_STATUS_INIT_OK */
+-        shim_log("BT ready: advertising as FM-1");
++        {                                         /* (the name: fm1.toml ble_name; not advertising: plat_ble_advertise) */
++            extern const char *ble_midi_name(void);
++            char b[40] = "BT ready: advertising as ";
++            uint32_t n = 25u;
++            const char *s = ble_midi_name();
++            while (*s && n < sizeof b - 1u)
++                b[n++] = *s++;
++            b[n] = 0;
++            shim_log(ble_adv_off ? "BT ready: not advertising" : b);
++        }
+         {
+             extern uint32_t shim_heap_peak;
+             char b[32] = "heap peak ", *q = put_dec(b + 10, shim_heap_peak);
+@@ -616,6 +626,12 @@ extern int ble_midi_peripheral_connected(void);
+ extern int ble_midi_peripheral_linked(void);
+ extern void ble_midi_enable(int on);
+ static uint8_t ble_off;                           /* switched off by the player (plat_ble_enable) */
++extern void ble_midi_advertise(int on, int ready);
++void plat_ble_advertise(int on)                   /* a computer may find the FM-1, or not (le_midi.c keeps the wish) */
++{
++    ble_adv_off = (uint8_t)!on;
++    ble_midi_advertise(on, ble_state == BLE_READY && !ble_off);
++}
+ int plat_ble_state(void) { return ble_off ? BLE_OFF : ble_state; }
+ int plat_ble_connected(void) { return !ble_off && ble_state == BLE_READY && ble_midi_peripheral_connected(); }
+ int plat_ble_linked(void) { return !ble_off && ble_state == BLE_READY && ble_midi_peripheral_linked(); }
+@@ -641,6 +657,8 @@ void plat_ble_scan(int on)
+         ble_midi_scan(on);
+ }
+ int plat_ble_found(int i, char *name, int *rssi) { return ble_state == BLE_READY && ble_midi_found(i, name, rssi); }
++extern int ble_midi_found_addr(int i, uint8_t *addr);
++int plat_ble_found_addr(int i, uint8_t addr[6]) { return ble_state == BLE_READY && ble_midi_found_addr(i, addr); }
+ int plat_ble_connect(int i) { return ble_state == BLE_READY ? ble_midi_connect(i) : -1; }
+ void plat_ble_disconnect(void)
+ {
+@@ -651,6 +669,7 @@ int plat_ble_device(void) { return ble_state == BLE_READY ? ble_midi_central_sta
+ #else
+ void plat_ble_scan(int on) { (void)on; }
+ int plat_ble_found(int i, char *name, int *rssi) { (void)i, (void)name, (void)rssi; return 0; }
++int plat_ble_found_addr(int i, uint8_t addr[6]) { (void)i, (void)addr; return 0; }
+ int plat_ble_connect(int i) { (void)i; return -1; }
+ void plat_ble_disconnect(void) {}
+ int plat_ble_device(void) { return BLE_DEV_OFF; }
+diff --git a/host/plat_host.c b/host/plat_host.c
+index cbc2023..771b2a5 100644
+--- a/host/plat_host.c
++++ b/host/plat_host.c
+@@ -304,7 +304,8 @@ void plat_ble_start(void)
+     ble_say("BT: starting");
+ }
+ /* Bluetooth MIDI devices (FM1B_BLE_CENTRAL): one stand-in, "BLE MIDI", found half a second into a scan;
+- * connecting takes 0.3 s; "ble device off" takes it away */
++ * connecting takes 0.3 s; "ble devices N" makes it N ("BLE MIDI", "BLE MIDI 2".., addresses C0:FF:EE:00:10:0i),
++ * "ble lose" takes the connected one away */
+ static uint32_t bdev_t;
+ static void ble_tick(void)
+ {
+@@ -328,20 +329,35 @@ void plat_ble_scan(int on)
+         bdev_state = BLE_DEV_OFF;
+     }
+ }
++static int host_bdevs = 1, host_bdev_at;       /* "ble devices N": how many stand-ins a scan finds; the one connected */
+ int plat_ble_found(int i, char *name, int *rssi)
+ {
+-    if (bdev_state != BLE_DEV_SCANNING || i != 0 || now_ms - bdev_t < 500u)
++    if (bdev_state != BLE_DEV_SCANNING || i < 0 || i >= host_bdevs || now_ms - bdev_t < 500u)
+         return 0;
+-    if (name)
+-        snprintf(name, 21, "BLE MIDI");
++    if (name) {
++        if (i)
++            snprintf(name, 21, "BLE MIDI %d", i + 1);
++        else
++            snprintf(name, 21, "BLE MIDI");
++    }
+     if (rssi)
+-        *rssi = -50;
++        *rssi = -50 - i;
++    return 1;
++}
++int plat_ble_found_addr(int i, uint8_t addr[6])  /* C0:FF:EE:00:10:0i */
++{
++    static const uint8_t A[5] = {0xC0, 0xFF, 0xEE, 0x00, 0x10};
++    if (!plat_ble_found(i, 0, 0))
++        return 0;
++    memcpy(addr, A, 5);
++    addr[5] = (uint8_t)i;
+     return 1;
+ }
+ int plat_ble_connect(int i)
+ {
+     if (!plat_ble_found(i, 0, 0))
+         return -1;
++    host_bdev_at = i;
+     bdev_state = BLE_DEV_CONNECTING;
+     bdev_t = now_ms;
+     return 0;
+@@ -364,6 +380,17 @@ void plat_ble_enable(int on)
+         plat_ble_start();
+     }
+ }
++/* advertising off (plat_ble_advertise): no computer connects; a connected one is let go. Kept for an app's checks
++ * (host_ble_adv) */
++static int host_ble_adv = 1;
++void plat_ble_advertise(int on)
++{
++    host_ble_adv = on != 0;
++    if (!on && ble_conn) {
++        ble_conn = ble_link = 0;
++        ble_say("computer let go");
++    }
++}
+ #if FM1B_WIFI
+ /* WiFi (FM1B_WIFI): a stand-in, two networks around ("Home", kept, and "Cafe", open), on 0.5 s after asked, joined
+  * 1.5 s after (an address 0.5 s later); the network code (fm1.toml net) is the device's alone: plat_net_task runs
+@@ -1453,6 +1480,12 @@ int main(int argc, char **argv)
+             } else if (!strcmp(a, "disconnect")) {
+                 ble_conn = ble_link = 0;
+                 ble_say("disconnected: reason 13");
++            } else if (!strcmp(a, "devices")) {   /* ble devices N: a scan finds N stand-ins (1..8) */
++                host_bdevs = atoi(b) < 0 ? 0 : atoi(b) > 8 ? 8 : atoi(b);
++            } else if (!strcmp(a, "lose")) {      /* the connected device goes away */
++                if (bdev_state == BLE_DEV_READY)
++                    printf("  device %d lost\n", host_bdev_at);
++                bdev_state = BLE_DEV_OFF;
+             } else {
+                 printf("line %d: ble %s: the stack is not ready\n", lineno, a);
+                 fails++;
+diff --git a/include/plat.h b/include/plat.h
+index 34c983e..65596e9 100644
+--- a/include/plat.h
++++ b/include/plat.h
+@@ -121,6 +121,7 @@ const char *plat_ble_log_line(int back);   /* 0 = the newest */
+ enum { BLE_DEV_OFF, BLE_DEV_SCANNING, BLE_DEV_CONNECTING, BLE_DEV_SEARCHING, BLE_DEV_READY };
+ void plat_ble_scan(int on);
+ int plat_ble_found(int i, char *name, int *rssi);   /* device i of the scan (name: 21 bytes); 0 = none */
++int plat_ble_found_addr(int i, uint8_t addr[6]);    /* its address, as written (AA:BB:..: addr[0] first); 0 = none */
+ int plat_ble_connect(int i);           /* 0 = connecting */
+ void plat_ble_disconnect(void);
+ int plat_ble_device(void);             /* BLE_DEV_*: READY is connected, MIDI both ways */
+@@ -128,6 +129,10 @@ int plat_ble_device(void);             /* BLE_DEV_*: READY is connected, MIDI bo
+  * on starts it (or advertises again). Whether it starts at power-on: APP_BLE_AT_BOOT (app.h, e.g. a saved setting;
+  * default 1) */
+ void plat_ble_enable(int on);
++/* Advertising (a computer may find and connect to the FM-1, as the name in fm1.toml's ble_name, "FM-1" by default):
++ * on (the default) or off, as the player asks; off lets a connected computer go and keeps the device's link
++ * (FM1B_BLE_CENTRAL), so the FM-1 is a central alone. Any time: before the radio is up (app_init) it waits for it */
++void plat_ble_advertise(int on);
+ 
+ /* WiFi (fm1.toml wifi = true: FM1B_WIFI 1): a station on JieLi's WiFi libraries and the SDK's lwIP, on the same shim.
+  * Off until the app turns it on; then it joins the networks it joined before (kept in the app's store object OBJ_WIFI,
+diff --git a/tools/build.py b/tools/build.py
+index 34a2e42..3381371 100755
+--- a/tools/build.py
++++ b/tools/build.py
+@@ -15,6 +15,9 @@ APP_DIR holds the app (app.h, app.c, its sources) and its fm1.toml:
+   id_prefix = "FM-1_0"       package identity: dev builds are the prefix + "00", releases the prefix + XXYYZZ
+   usb_manufacturer = "..."   the USB names (felucca-bsp FELUCCA_USB_MANUFACTURER / FELUCCA_USB_PRODUCT)
+   usb_product = "..."
++  ble_name = "..."           the name Bluetooth advertises (ble/midi/le_midi.c FM1B_BLE_NAME): 1..29 printable ASCII
++                             characters, whole in the scan response (over 8: shortened in the advertising packet,
++                             which has no more room); "FM-1" without it
+   o2 = ["dsp/engine.c"]      separate units compiled at -O2 (the app's DSP), relative to APP_DIR (globs too); each with
+                              its own directory on the include path
+   o2_cflags = ["-DX=1"]      more flags for those; o2_include = ["lib/prefix.h"]: a header included first in each
+@@ -380,6 +383,11 @@ def radio_units():
+     flags = [*inc(*(dst / d for d in BLE_INC + WIFI_INC * WIFI)), *inc(SRC / "ble" / "shim")]
+     if WIFI:
+         flags += ["-DSHIM_WIFI=1"]
++    if CONF.get("ble_name"):                      # the name Bluetooth advertises (ble/midi/le_midi.c)
++        name = CONF["ble_name"]
++        if not re.fullmatch(r"[ -~]{1,29}", name) or '"' in name or "\\" in name:
++            raise SystemExit(f"fm1.toml ble_name {name!r}: 1..29 printable ASCII characters (the scan response's room)")
++        flags.append(f'-DFM1B_BLE_NAME="{name}"')
+     o = OUT / "ble" / "o"
+     o.mkdir(parents=True, exist_ok=True)
+     units = [("cc", "-c", SRC / "ble" / "shim" / "ctx.S", "-o", o / "ctx.o")]

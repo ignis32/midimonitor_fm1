@@ -9,11 +9,10 @@
 #define APP_SPLASH_RGB RGB(110, 255, 150)
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz */
 #define APP_CANVAS_PX (240u * 192u)      /* the log, whole: 16 lines */
-#define APP_BTDEV                        /* Bluetooth MIDI devices (lib/btdev.h) */
 #define APP_LOOP                         /* app_loop: the tap drained every pass of the main loop */
-#define APP_BLE_AT_BOOT (!mon_ble_off())  /* Bluetooth at power-on: as the player left it (REC held) */
-#define FM1B_USB_HOST 1                  /* the USB-C port as a USB MIDI host (GLO K4; the usb host patches) */
-int mon_ble_off(void);
+#define APP_BLE_AT_BOOT (mon_ble_on())   /* the radio at power-on: on unless BLE-P and BLE-C are both off (ble.c) */
+#define FM1B_USB_HOST 1                  /* the USB-C port as a USB MIDI host (GLO 1 K2; the usb host patches) */
+int mon_ble_on(void);
 
 /* the store: the app's objects, the panel calibration (the platform's) and Bluetooth's address and pairing among
  * them, and their flash offsets. All in the data area, which stock V15 wipes: the settings sectors at 0xFC000
