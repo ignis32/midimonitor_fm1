@@ -150,5 +150,6 @@ Following an fm1-base update is: revert the patches, bump the submodule, apply t
 
 MPL-2.0, as fm1-base (`LICENSE`). A build with Bluetooth links JieLi's binary Bluetooth libraries from the AC79 SDK
 (Apache-2.0), taken from the SDK at build time and never kept in this repository, so no GPL code may be in it. The
-USB MIDI host comes from Melodee, which is GPL-3.0-only; it is MPL-2.0 here because both its authors said so in
-writing, quoted with links in [LICENSING.md](LICENSING.md).
+USB MIDI host, by Adrien Tibi and Kerem Kilic, is MPL-2.0 by its authors' explicit permission: Adrien's
+[comment](https://github.com/keremimo/melodee/pull/75#issuecomment-6384184014) on Melodee #75 and Kerem's
+[felucca-bsp #7](https://github.com/hugelton/felucca-bsp/pull/7), both quoted in [LICENSING.md](LICENSING.md).
