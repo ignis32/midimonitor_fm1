@@ -3,7 +3,7 @@
 A MIDI monitor and thru router for the M-VAVE FM-1, in a green phosphor terminal's look. It shows every MIDI message
 that comes in from USB, the TRS jack and Bluetooth, in hex, in words or both, and passes MIDI on between them.
 
-**Status: early (0.2).** It runs on the FM-1. Expect changes.
+**Status: early (0.3).** It runs on the FM-1. Expect changes.
 
 <img src="docs/screen-log.png" width="240" alt="LOG: messages from USB, TRS and both Bluetooth links, in hex and in words"> <img src="docs/screen-filter.png" width="240" alt="FILTER: channels on the white keys, message types on the black keys"> <img src="docs/screen-thru.png" width="240" alt="THRU: the FM-1 as a Bluetooth MIDI dongle">
 
