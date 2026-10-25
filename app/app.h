@@ -12,6 +12,7 @@
 #define APP_BTDEV                        /* Bluetooth MIDI devices (lib/btdev.h) */
 #define APP_LOOP                         /* app_loop: the tap drained every pass of the main loop */
 #define APP_BLE_AT_BOOT (!mon_ble_off())  /* Bluetooth at power-on: as the player left it (REC held) */
+#define FM1B_USB_HOST 1                  /* the USB-C port as a USB MIDI host (GLO K4; the usb host patches) */
 int mon_ble_off(void);
 
 /* the store: the app's objects, the panel calibration (the platform's) and Bluetooth's address and pairing among

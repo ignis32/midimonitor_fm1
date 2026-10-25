@@ -1,0 +1,48 @@
+# The USB-C port as a USB MIDI host (GLO K4, asks; never kept): the platform's host simulated ("usbhost")
+wait 600
+expect usbh 0
+tap GLO
+wait 50
+spin K4 1
+wait 20
+expect ask 5
+shot usbh_ask.png
+tap OCT-
+wait 20
+expect ask 0
+expect usbh 0
+spin K4 1
+wait 20
+tap OCT+
+wait 50
+expect usbh 1
+usbhost nomidi
+wait 50
+expect usbh 1
+usbhost plug
+wait 50
+expect usbh 2
+shot usbh_glo.png
+# its MIDI comes as USB: in the log, by THRU too
+tap GLO
+wait 20
+tap GLO
+wait 50
+expect tab 0
+midi USB 90 3C 64
+raw USB F0 7E 7F 06 01 F7
+wait 1400
+expect last_src 0
+expect last_type 6
+shot usbh_log.png
+usbhost unplug
+wait 50
+expect usbh 1
+# back to the computer's
+tap GLO
+wait 50
+spin K4 1
+wait 20
+tap OCT+
+wait 50
+expect usbh 0

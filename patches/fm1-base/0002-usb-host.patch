@@ -1,0 +1,131 @@
+USB MIDI host, the platform's side: an app switches the USB-C port between a device (the computer's) and the host of
+a USB-MIDI controller (plat.h plat_usb_host, plat_usb_host_state, plat_usb_host_event), with FM1B_USB_HOST 1 in its
+app.h (default 0: nothing of it is built). The main loop runs the driver's uh_task; the host simulator has the same
+API and a "usbhost plug | nomidi | unplug" command. The driver is felucca-bsp's chip/usb_host.c
+(patches/felucca-bsp/0002-usb-midi-host.patch), from Melodee pull request #75 by Adrien Tibi (Recursive Field
+Instruments), under MPL-2.0 by its author's leave (quoted in that patch and in the driver's header:
+https://github.com/keremimo/melodee/pull/75#issuecomment-6384184014). This patch is ignis32's (MPL-2.0).
+Why MIDIMON needs it: a USB-MIDI controller plugged into the FM-1 itself, monitored and passed on by THRU.
+Applies to: fm1-base aa2b3bc. Upstream: keremimo means to bring USB host to fm1-base (same thread).
+diff --git a/device/main_fm1.c b/device/main_fm1.c
+index 800398c..11f8d87 100644
+--- a/device/main_fm1.c
++++ b/device/main_fm1.c
+@@ -862,6 +862,9 @@ static void fm1_main(void)
+ 
+     for (;;) {
+         fm1_wdt_feed();
++#if FM1B_USB_HOST
++        uh_task(fm1_ms);                            /* before usb_retry: a host port is not retried as a device */
++#endif
+         usb_retry(fm1_ms);
+         if (fm1_ms > 30000u && bootguard.pending) {     /* a crash or hang in the first 30 s counts */
+             bootguard.pending = 0;
+diff --git a/device/plat_fm1.c b/device/plat_fm1.c
+index 9d462de..9d94ff0 100644
+--- a/device/plat_fm1.c
++++ b/device/plat_fm1.c
+@@ -200,6 +200,15 @@ void plat_host_patience(uint32_t try_ms, uint32_t total_ms)
+ /* USB audio full: the render at full level for the USB audio input, MASTER after it (main_fm1.c render_block) */
+ static volatile uint8_t uac_full;
+ void plat_usb_audio_full(int on) { uac_full = (uint8_t)(on != 0); }
++#if FM1B_USB_HOST                                 /* the USB MIDI host (felucca-bsp chip/usb_host.c): uh_task switches */
++void plat_usb_host(int on) { uh.want = (uint8_t)(on != 0); }
++int plat_usb_host_state(void) { return !uh.on ? USBH_OFF : uh.run ? USBH_READY : USBH_WAITING; }
++int plat_usb_host_event(void) { return uh_event(); }   /* (UH_MSG_* are USBH_EV_*, in the same order) */
++#else
++void plat_usb_host(int on) { (void)on; }
++int plat_usb_host_state(void) { return USBH_OFF; }
++int plat_usb_host_event(void) { return USBH_EV_NONE; }
++#endif
+ void plat_yield(void)
+ {
+     ble_poll();                                   /* Bluetooth: its notifications go out while the screen draws */
+diff --git a/device/unity.c b/device/unity.c
+index 512374b..021f806 100644
+--- a/device/unity.c
++++ b/device/unity.c
+@@ -91,6 +91,10 @@ static volatile uint32_t fm1_ms;  /* milliseconds since boot (TIMER4-based, TIME
+                                    * otherwise run its ring dry: holds in the recording); its 4 KB ring in the pool */
+ #endif
+ #define FELUCCA_UAC_DEEP FM1B_UAC_DEEP
++#ifndef FM1B_USB_HOST
++#define FM1B_USB_HOST 0           /* the USB-C port as a USB MIDI host, when the app asks (plat_usb_host; app.h) */
++#endif
++#define FELUCCA_USB_HOST FM1B_USB_HOST
+ #ifndef FM1B_UAC_RING_POOL
+ #define FM1B_UAC_RING_POOL 0      /* 1: the USB audio input's ring (2 KB; deep: 4) in the pool, not in RAM (an app whose
+                                    * RAM is full: fm1-radio) */
+diff --git a/host/plat_host.c b/host/plat_host.c
+index 85620fd..330c949 100644
+--- a/host/plat_host.c
++++ b/host/plat_host.c
+@@ -22,6 +22,8 @@
+  *   ble connect | ble link | ble disconnect   a central listening, or linked and not yet listening (FM1B_BLE: the
+  *                                stand-in stack is ready a second after the start)
+  *   wav FILE | wavstop           start / stop recording the output
++ *   usbhost plug | nomidi | unplug   a USB-MIDI controller (or a device without MIDI) on the port, once the app
++ *                                has made it a host (plat_usb_host); its MIDI then comes as "midi USB" / "raw USB"
+  *   peakreset                    restart the output peak (expect peak_db_min / peak_db_max)
+  *   shot FILE.png                save the screen
+  *   leds                         print the lit buttons and keys (keys: # bright, + dim)
+@@ -501,6 +503,23 @@ int plat_host_read(uint32_t addr, uint8_t *dst, uint32_t n) { (void)addr, (void)
+ void plat_host_patience(uint32_t try_ms, uint32_t total_ms) { (void)try_ms, (void)total_ms; }
+ static int uac_full;                            /* plat_usb_audio_full: the render at full level, MASTER after it */
+ void plat_usb_audio_full(int on) { uac_full = on != 0; }
++/* the USB MIDI host: the app's switch, and a controller the script plugs in ("usbhost") */
++static int usbh_want, usbh_ready, usbh_ev;
++void plat_usb_host(int on)
++{
++    if ((on != 0) != usbh_want)
++        usbh_ev = on ? USBH_EV_ON : USBH_EV_OFF;
++    usbh_want = on != 0;
++    if (!on)
++        usbh_ready = 0;
++}
++int plat_usb_host_state(void) { return !usbh_want ? USBH_OFF : usbh_ready ? USBH_READY : USBH_WAITING; }
++int plat_usb_host_event(void)
++{
++    int e = usbh_ev;
++    usbh_ev = USBH_EV_NONE;
++    return e;
++}
+ 
+ /* flash: one buffer per object, kept across a simulated reboot */
+ static uint8_t store[OBJ_NOBJ][PLAT_STORE_MAX];
+@@ -1465,6 +1484,12 @@ int main(int argc, char **argv)
+             }
+             fwrite(fb, 2, 240 * 240, f);
+             fclose(f);
++        } else if (!strcmp(cmd, "usbhost")) {         /* usbhost plug | nomidi | unplug: a controller on the host port */
++            if (usbh_want) {
++                usbh_ready = !strcmp(a, "plug");
++                usbh_ev = !strcmp(a, "plug") ? USBH_EV_MIDI : !strcmp(a, "nomidi") ? USBH_EV_NOMIDI : USBH_EV_LOST;
++            }
++            run_ms(2);
+         } else if (!strcmp(cmd, "flash_fail")) {
+             store_fail = atoi(a);
+         } else if (!strcmp(cmd, "clock")) {           /* clock N [MS]: N MIDI clocks in (F8), MS apart (default 21) */
+diff --git a/include/plat.h b/include/plat.h
+index 2140404..90c67aa 100644
+--- a/include/plat.h
++++ b/include/plat.h
+@@ -182,6 +182,18 @@ void plat_host_patience(uint32_t try_ms, uint32_t total_ms);   /* each try's wai
+  * speaker and headphones only; 0, both at MASTER (the default) */
+ void plat_usb_audio_full(int on);
+ 
++/* USB MIDI host (FM1B_USB_HOST 1 in the app's app.h; felucca-bsp chip/usb_host.c, from Melodee pull request #75):
++ * the USB-C port as the host of a class compliant USB-MIDI controller, alone or behind a hub with its own power
++ * (nothing drives VBUS: the controller needs power from a hub or an OTG adapter). Its MIDI comes in as USB
++ * (plat_midi_in: channel messages, clock and transport; the MIDI tap: all of it). Never kept: every boot is a
++ * device, so the update paths always work. Full-speed devices only; no MIDI out to the controller. Main loop. */
++enum { USBH_OFF, USBH_WAITING, USBH_READY };   /* a device; a host with no controller yet; a controller playing */
++enum { USBH_EV_NONE, USBH_EV_ON, USBH_EV_OFF, USBH_EV_MIDI, USBH_EV_NOMIDI, USBH_EV_LOW, USBH_EV_LOST };
++void plat_usb_host(int on);             /* 1: the port a host, 0: a device again (the computer's) */
++int plat_usb_host_state(void);          /* USBH_* (USBH_OFF too without FM1B_USB_HOST) */
++int plat_usb_host_event(void);          /* what happened since the last call, once: USBH_EV_* (NOMIDI: a device
++                                         * with no USB-MIDI interface, LOW: a low-speed one, LOST: gone) */
++
+ /* the keys' velocity and pressure (an app with APP_KEY_SENSE): on, the scan reads the keys on the analog rows and
+  * hands each reading to the app (app_key_sample, app_key_probe); off by default */
+ void plat_sense(int on);

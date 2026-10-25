@@ -19,7 +19,8 @@
  *   THRU page        SELECT a source; K1 K2 K3 its route to USB, BLE-P, BLE-C (any of them, not back to itself);
  *                    K4 thru on / off (the routes kept)
  *   GLO page         K1 Bluetooth on / off (asks), K2 a Bluetooth device (scans while the page is up; turn: asks to
- *                    connect to the one picked, or to let the connected one go), K3 C3 / C4 for note 60
+ *                    connect to the one picked, or to let the connected one go), K3 C3 / C4 for note 60, K4 the
+ *                    USB-C port a USB MIDI host or the computer's (asks; never kept: every power-on, the computer's)
  *   GLO page 2       K1 the skin (the colours), K2 the platform's own SysEx over USB logged or not
  * The lights: the source buttons flash with what comes in (dim: hidden); the keys light with the notes held (F3..G5,
  * OCT- / OCT+: some below / above); PLAY green on the beat of a clock coming in, red while paused or on an error. */
@@ -51,7 +52,7 @@ static settings_t set;
 static uint8_t set_dirty;
 
 /* the questions (OCT+ yes, OCT- no) */
-enum { ASK_NONE, ASK_CLEAR, ASK_BT, ASK_CONNECT, ASK_LET_GO };
+enum { ASK_NONE, ASK_CLEAR, ASK_BT, ASK_CONNECT, ASK_LET_GO, ASK_USBH };
 
 static struct {
     uint32_t tab, tab_before_glo, glo_page;   /* GLO: page 0 (Bluetooth, note 60) or 1 (the look, the log) */
@@ -402,6 +403,8 @@ static void answer(int yes)              /* the question's answer */
         plat_ble_enable(!set.ble_off);
         plat_store_save(OBJ_SETTINGS, &set, sizeof set);
         app_say("BLUETOOTH", set.ble_off ? "OFF" : "ON");
+    } else if (yes && ui.ask == ASK_USBH) {   /* never kept: every power-on is a device (the computer's, updates) */
+        plat_usb_host(plat_usb_host_state() == USBH_OFF);
     } else if (yes && (ui.ask == ASK_CONNECT || ui.ask == ASK_LET_GO)) {
         ev = btdev_save();
         app_say(btdev_word(ev), ev == BTDEV_CONNECTING ? btdev_name() : "");
@@ -555,7 +558,10 @@ static void input(void)
             set.midc = set.midc == 3u ? 4u : 3u;
             changed();
         }
-        plat_enc(EN_K4);                 /* (free for now) */
+        if (plat_enc(EN_K4) != 0 && !ui.ask) {   /* the USB-C port: the computer's, or a controller's host (asks) */
+            ui.ask = ASK_USBH;
+            ui.redraw_all = 1;
+        }
         return;
     }
     if (ui.tab == TAB_THRU) {            /* SELECT the source; K1 K2 K3 its route to USB, BLE-P, BLE-C; K4 thru on */
@@ -683,6 +689,13 @@ void app_frame(void)
     mon_poll();
     input();
     speak();
+    {   /* the USB host: what happened, in words */
+        static const char *const W[] = {"", "HOST ON", "HOST OFF", "CONTROLLER IN", "NO MIDI DEVICE",
+                                        "LOW SPEED: NO", "CONTROLLER LOST"};
+        int ev;
+        while ((ev = plat_usb_host_event()) != USBH_EV_NONE)
+            app_say("USB", ev < (int)(sizeof W / sizeof W[0]) ? W[ev] : "?");
+    }
     if (FM1B_BLE) {                      /* GLO up: the scan for devices; what happened, in words */
         static int found;
         int ev;
@@ -709,7 +722,7 @@ void app_frame(void)
         sig |= (uint32_t)(ui.act[s] && now - ui.act[s] < 90u) << s;
     sig |= (uint32_t)set.srcs << 4 | (uint32_t)set.fmt << 8 | (uint32_t)set.tmode << 10 | set.midc << 12 |
            (uint32_t)set.scan << 15 | (uint32_t)set.thru << 16 | (uint32_t)ui.paused << 17 |
-           (ui.scroll < 0x3FFFu ? ui.scroll : 0x3FFFu) << 18;
+           (ui.scroll < 0xFFFu ? ui.scroll : 0xFFFu) << 18 | (uint32_t)plat_usb_host_state() << 30;
     if (ui.msg_until && now >= ui.msg_until) {
         ui.msg_until = 0;
         ui.redraw_all = 1;
@@ -804,6 +817,8 @@ int app_expect(const char *what, int *got)
         *got = set.ble_off;
     else if (!strcmp(what, "view"))
         *got = set.view;
+    else if (!strcmp(what, "usbh"))      /* the USB port: 0 the computer's, 1 a host waiting, 2 a controller in */
+        *got = plat_usb_host_state();
     else if (!strcmp(what, "vk_held")) { /* KEYS: notes held, all channels */
         int c, n, k = 0;
         for (c = 0; c < 16; c++)

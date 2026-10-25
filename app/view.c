@@ -101,13 +101,14 @@ static void draw_footer(void)
     cv_rect(0, 1, 240, 1, G_MID);
     for (s = 0; s < NTAPS; s++) {      /* the sources: lit as messages come, dim when hidden */
         int shown = set.srcs >> s & 1u, busy = ui.act[s] && now - ui.act[s] < 90u;
+        const char *nm = s == TAP_USB && plat_usb_host_state() != USBH_OFF ? "HOST" : SRC_NAME[s];   /* (USB host) */
         if (shown && busy)
-            text_inv(x, 6, &FONT_XS, SRC_NAME[s], G_HI);
+            text_inv(x, 6, &FONT_XS, nm, G_HI);
         else
-            cv_text(x, 6, &FONT_XS, SRC_NAME[s], shown ? G_MID : G_FAINT);
+            cv_text(x, 6, &FONT_XS, nm, shown ? G_MID : G_FAINT);
         if (!shown)
-            cv_rect(x - 1, 12, text_w(&FONT_XS, SRC_NAME[s]) + 2, 1, G_DIM);
-        x += text_w(&FONT_XS, SRC_NAME[s]) + CW;
+            cv_rect(x - 1, 12, text_w(&FONT_XS, nm) + 2, 1, G_DIM);
+        x += text_w(&FONT_XS, nm) + CW;
     }
     if (ui.paused || ui.scroll) {      /* the view stopped: paused, or scrolled back so many lines */
         if (ui.paused)
@@ -401,9 +402,10 @@ static void draw_glo2(void)              /* page 2: the look, what the log keeps
 
 static void draw_glo(void)
 {
-    static const char *const LABEL[3] = {"K1 BLUETOOTH", "K2 DEVICE", "K3 NOTE 60"};
+    static const char *const LABEL[4] = {"K1 BLUETOOTH", "K2 DEVICE", "K3 NOTE 60", "K4 USB PORT"};
+    static const char *const USBH[3] = {"COMPUTER", "HOST: WAITING", "HOST: PLAYING"};
     char name[21];
-    const char *val[3];
+    const char *val[4];
     int32_t y = 2, i, n;
     cv_text(240 - 4 - 3 * CW, 2, &FONT_XS, ui.glo_page ? "2/2" : "1/2", G_DIM);
     if (ui.glo_page) {
@@ -414,7 +416,8 @@ static void draw_glo(void)
     val[1] = !FM1B_BLE_CENTRAL || set.ble_off ? "--" : btdev_busy() ? btdev_name() : btdev_count() ? "TURN TO PICK"
              : "SCANNING..";
     val[2] = set.midc == 3u ? "C3 (YAMAHA)" : "C4 (ROLAND)";
-    for (i = 0; i < 3; i++, y += 15) {
+    val[3] = USBH[plat_usb_host_state() % 3];
+    for (i = 0; i < 4; i++, y += 15) {
         cv_text(4, y, &FONT_XS, LABEL[i], G_MID);
         cv_text(4 + 14 * CW, y, &FONT_XS, val[i], G_HI);
     }
@@ -510,12 +513,16 @@ static void draw_body(void)
             s_cat(q, set.ble_off ? "BLUETOOTH ON?" : "BLUETOOTH OFF?");
         else if (ui.ask == ASK_LET_GO)
             s_cat(q, "DISCONNECT?");
+        else if (ui.ask == ASK_USBH)
+            s_cat(q, plat_usb_host_state() == USBH_OFF ? "USB HOST ON?" : "USB HOST OFF?");
         else
             s_cat(q, "CONNECT TO");
         if (ui.ask == ASK_CONNECT)
             btdev_found(btdev_pick(), name, 0);
         else if (ui.ask == ASK_LET_GO)
             s_cat(name, btdev_name());
+        else if (ui.ask == ASK_USBH)     /* (what the port stops being) */
+            s_cat(name, plat_usb_host_state() == USBH_OFF ? "DISCONNECTS THE COMPUTER" : "BACK TO THE COMPUTER");
         cv_rect(20, 60, 200, 64, G_BG);
         cv_rect(20, 60, 200, 1, G_HI);
         cv_rect(20, 123, 200, 1, G_HI);

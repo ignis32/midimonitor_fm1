@@ -39,7 +39,9 @@ whether it has been offered upstream. Patched files are MPL-2.0 as the originals
 | Patch | What |
 | --- | --- |
 | `felucca-bsp/0001-midi-tap-usb.patch` | USB's side of the MIDI tap: every USB-MIDI packet in, copied to the tap before usb.c sorts it |
+| `felucca-bsp/0002-usb-midi-host.patch` | the USB MIDI host driver (`chip/usb_host.c`), Adrien Tibi's from Melodee #75, MPL-2.0 by his permission (quoted in the patch, the files and LICENSING.md) |
 | `fm1-base/0001-midi-tap.patch` | the MIDI tap (`plat_tap`, `device/midi_tap.c`): every byte from USB, the jack and each Bluetooth link, as it came; the simulator's `raw` |
+| `fm1-base/0002-usb-host.patch` | the USB host for apps: `FM1B_USB_HOST`, `plat_usb_host` / `_state` / `_event`, the main loop's `uh_task`, the simulator's `usbhost` |
 
 Upstream took in what MIDIMON's earlier copy of fm1-base changed for Bluetooth (each link addressed apart:
 `TO_BLE_HOST`, `TO_BLE_DEV`; the send stall per link), so those are no longer patches.

@@ -29,6 +29,12 @@ are USB, BLE-P and BLE-C.
 - **Four sources**, each its own: `USB`, `TRS` (the MIDI IN jack), `BLE-P` (a computer or tablet connected to the
   FM-1 over Bluetooth: the FM-1 is the peripheral) and `BLE-C` (a Bluetooth MIDI device the FM-1 connected to: the
   FM-1 is the central). Both Bluetooth roles at once.
+- **USB host** (new, not yet tried on hardware): the USB-C port can host a class-compliant USB-MIDI controller
+  instead of talking to a computer (GLO, K4; asks first, never kept: every power-on the port is the computer's
+  again, so updates always work). Its MIDI comes in as `USB` (the footer says `HOST`). Full-speed devices, alone or
+  behind one hub; the FM-1 gives no power on the port, so use a powered hub or an OTG adapter that powers the
+  controller. No MIDI out to the controller. The driver is Adrien Tibi's, from Melodee
+  ([#75](https://github.com/keremimo/melodee/pull/75)).
 - **Everything as it came**: SysEx (assembled, the maker named, its length), system common, clock and transport,
   active sensing, reset, running status (marked), and the faults: a stray byte, a message cut short, a SysEx without
   its end, messages lost to a full buffer.
@@ -49,7 +55,8 @@ are USB, BLE-P and BLE-C.
 - **THRU**: routes from each source to any of USB, BLE-P and BLE-C, each route with its own filter (channels and
   message types). The FM-1 as a Bluetooth MIDI bridge: a Bluetooth device to the computer over USB, a keyboard on
   the jack to an iPad, and so on. (SysEx goes to USB only, for now.)
-- **GLO**: Bluetooth on or off, connecting to a Bluetooth MIDI device, C3 or C4 for note 60; a second page (GLO
+- **GLO**: Bluetooth on or off, connecting to a Bluetooth MIDI device, C3 or C4 for note 60, the USB port a host or
+  the computer's; a second page (GLO
   again) for the skin (green, amber, cyan, white, red) and whether the FM-1's own SysEx over USB (screen reader,
   updates) is logged.
 - **Lights**: the source buttons flash as messages come in, the keys light with the notes held, PLAY blinks green on
@@ -66,7 +73,7 @@ are USB, BLE-P and BLE-C.
 | PLAY | pause / go on (what comes meanwhile is still logged) |
 | FX, SEL, ENV, LFO | show / hide USB, TRS, BLE-P, BLE-C |
 | K1, K2, K3 | LOG: HEX / HUMAN / BOTH; the time; the scanlines. THRU: the source's route to USB, BLE-P, BLE-C |
-| K4 | THRU: thru on / off |
+| K4 | THRU: thru on / off. GLO: the USB port a USB MIDI host, or the computer's (asks) |
 | EDIT | THRU: a route's filter, and back. FILTER: the default filter |
 | HOME | clear the log (asks) |
 | SAVE | keep the settings (lit when something changed) |
