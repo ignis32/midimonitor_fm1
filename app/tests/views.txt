@@ -153,3 +153,37 @@ wait 60
 expect tab 0
 expect view 4
 expect dirty 1
+
+# HOME: home. From another page to the LOG tab; from another view to the log itself; on the log, it asks to clear
+turn PRESET 3
+wait 50
+expect tab 3
+tap HOME
+wait 20
+expect tab 0
+expect view 4
+expect ask 0
+tap HOME
+wait 20
+expect view 0
+expect ask 0
+tap HOME
+wait 20
+expect ask 1
+tap OCT-
+wait 20
+expect ask 0
+tap GLO
+wait 20
+tap GLO
+wait 20
+expect glo_page 1
+spin K3 1
+wait 50
+expect picker 1
+tap HOME
+wait 50
+expect tab 0
+expect glo_page 0
+expect picker 0
+expect ask 0

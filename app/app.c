@@ -13,7 +13,8 @@
  *   PLAY             pause / go on (the log keeps everything that comes meanwhile)
  *   FX SEL ENV LFO   show / hide USB, TRS, BLE (the computer), DEV (the Bluetooth device)
  *   K1 K2 K3         HEX / HUMAN / BOTH; the time (+ms, since power-on, none); the scanlines
- *   HOME             clear the log (asks: OCT+ yes, OCT- no)
+ *   HOME             home: the LOG tab, then the log itself (from KEYS, CC..); on the log, clear it (asks: OCT+ yes,
+ *                    OCT- no)
  *   SAVE             keep the settings (lit: changed)
  *   FILTER page      white keys the channels, black keys the messages; OCT- none, OCT+ all, EDIT the defaults
  *   THRU page        SELECT a source; K1 K2 K3 its route to USB, BLE-P, BLE-C (any of them, not back to itself);
@@ -444,8 +445,17 @@ static void button(uint32_t k)
             ui.scroll = 0;
         ui.redraw_all = 1;
         break;
-    case B_HOME:
-        ui.ask = ASK_CLEAR;
+    case B_HOME:                         /* home: the LOG tab, then the log itself; there, it asks to clear it */
+        if (ui.tab != TAB_LOG) {
+            ui.tab = TAB_LOG;
+            ui.glo_page = 0;
+            ui.rt_edit = 0;
+        } else if (set.view != VIEW_LOG) {
+            set.view = VIEW_LOG;
+            changed();
+        } else {
+            ui.ask = ASK_CLEAR;
+        }
         ui.redraw_all = 1;
         break;
     case B_SAVE:

@@ -155,7 +155,7 @@ static void ble_knob(int k, int32_t e)   /* k: 1..4 */
 static int picker_button(uint32_t k)
 {
     uint8_t a[6];
-    if (!ui.picker)
+    if (!ui.picker || k == B_HOME)       /* (HOME goes home: the list closes as its page goes) */
         return 0;
     if (k == B_OCTDN) {
         ui.picker = 0;

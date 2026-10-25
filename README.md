@@ -82,7 +82,7 @@ are USB, BLE-P and BLE-C.
 | K3 | LOG: the scanlines. THRU: route to BLE-C. GLO 2/3: the device list (BLE-Central CHOOSE), and move in it |
 | K4 | THRU: thru on / off. GLO 2/3: RECONNECT to the chosen device on / off |
 | EDIT | THRU: a route's filter, and back. FILTER: the default filter |
-| HOME | clear the log (asks) |
+| HOME | home: the LOG tab from any page, then the log itself from KEYS, CC, CHANS or CLOCK; on the log, clear it (asks) |
 | SAVE | keep the settings (lit when something changed; the chosen Bluetooth device is kept at once) |
 | OCT- / OCT+ | a question's NO / YES. The device list: back / connect. FILTER and a route's filter: nothing / everything |
 
