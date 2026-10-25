@@ -1,6 +1,6 @@
 # Changes
 
-## Next
+## 0.4
 
 - **USB name back to `MIDIMON FM-1`**: 0.3's `FM1_MONITOR` on USB lost the "FM-1" the firmware installers look
   for. Bluetooth stays `FM1_MONITOR`.
