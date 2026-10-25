@@ -6,6 +6,7 @@ that comes in from USB, the TRS jack and Bluetooth, in hex, in words or both, an
 **Status: early (0.3).** It runs on the FM-1. Expect changes.
 
 <img src="docs/screen-log.png" width="240" alt="LOG: messages from USB, TRS and both Bluetooth links, in hex and in words"> <img src="docs/screen-filter.png" width="240" alt="FILTER: channels on the white keys, message types on the black keys"> <img src="docs/screen-thru.png" width="240" alt="THRU: the FM-1 as a Bluetooth MIDI dongle">
+<img src="docs/screen-keys.png" width="240" alt="KEYS: the notes held per channel, a zoomed keyboard with velocity and pressure"> <img src="docs/screen-cc.png" width="240" alt="CC: pitch bend and channel pressure as graphs, the controllers as bars">
 
 ## A Bluetooth MIDI dongle you already have
 
