@@ -1,33 +1,23 @@
 # Licensing
 
-**fm1-base is MPL-2.0** (full text in `LICENSE`), file by file: every source file carries an
-`SPDX-License-Identifier: MPL-2.0` header. If you change one of these files and distribute it, publish your change to
-that file under MPL-2.0. Your own files, such as an app built on fm1-base, may use any licence, closed ones included.
-So a firmware made of felucca-bsp, fm1-base and its own code may link JieLi's binary Bluetooth and Wi-Fi libraries.
+**MIDIMON is MPL-2.0** (full text in `LICENSE`): its app (`app/`), its tools and its patches to the platform
+(`patches/`, which change MPL-2.0 files and are MPL-2.0 as they are).
 
-## Where the code comes from
+## The platform (submodules, as upstream has them)
 
-| Code | Origin | Why it is MPL-2.0 |
+| Code | Where | Licence |
 | --- | --- | --- |
-| Leo Kuroshita's code (from Felucca, through the firmwares below) | [Felucca](https://github.com/hugelton/Felucca), GPL-3.0-only there | his permission to use the Felucca code he owns under MPL-2.0: [hugelton/felucca-bsp#4](https://github.com/hugelton/felucca-bsp/issues/4) |
-| Charles Vestal's code | the platform layer of [fm1-x0x](https://github.com/charlesvestal/fm1-x0x), [fm1-fomni](https://github.com/charlesvestal/fm1-fomni) and the other FM-1 firmwares, GPL-3.0-only there | his own |
-| `bsp/` | [felucca-bsp](https://github.com/hugelton/felucca-bsp), copied in (commit 33cac69) | MPL-2.0 there |
-| `ble/` (the Bluetooth shim and the MIDI service) | Charles Vestal's fm1-ble and fm1-radio, used by fm1-ctl | his own; a few parts repeat the JieLi AC79 SDK (below) |
+| [fm1-base](https://github.com/charlesvestal/fm1-base) by Charles Vestal | `fm1-base/` | MPL-2.0, file by file (its `LICENSING.md`) |
+| [felucca-bsp](https://github.com/hugelton/felucca-bsp) by Leo Kuroshita | `fm1-base/bsp/` | MPL-2.0 |
 
-Some files in `ble/` repeat parts of the JieLi AC79 SDK, Copyright (c) JIELI (Zhuhai Jieli Technology Co., Ltd.),
-under the Apache License 2.0 (`LICENSES/Apache-2.0.txt`): the connection handling of `le_trans_data.c` in
-`ble/midi/le_midi.c`, interface details in `ble/shim/shim.h` and `ble/shim/misc.c`, and the radio's calibration
-values in `ble/shim/rf_const.c` (Apache-2.0 only). Each file's header says which parts, and carries
-`MPL-2.0 AND Apache-2.0`.
-
-The GPL copies in Felucca and in those firmwares stay under the GPL; the copies here are MPL-2.0. No code by other
-Felucca contributors is in fm1-base: the history of every file was checked when it was imported (from fm1-fomni
-`7e7547f`).
+fm1-base's `LICENSING.md` says where its code comes from: Leo Kuroshita's Felucca code used under MPL-2.0 with his
+permission ([hugelton/felucca-bsp#4](https://github.com/hugelton/felucca-bsp/issues/4)), Charles Vestal's own, and
+the parts of `fm1-base/ble/` that repeat the JieLi AC79 SDK (Apache-2.0, `MPL-2.0 AND Apache-2.0` in their headers).
 
 ## Not part of fm1-base
 
 | What | Licence | Where |
 | --- | --- | --- |
-| Terminus (Dimitar Toshkov Zhekov) | SIL OFL 1.1 | `assets/fonts/ter-u*.bdf`, `assets/fonts/Terminus-LICENSE.txt` |
+| Terminus (Dimitar Toshkov Zhekov) | SIL OFL 1.1 | `fm1-base/assets/fonts/ter-u*.bdf`, `fm1-base/assets/fonts/Terminus-LICENSE.txt` |
 | JieLi AC79 SDK files a package needs (`uboot.boot`, `cfg_tool.bin`, `eq_cfg_hw.bin`) | Apache-2.0 | read from your SDK checkout at build time; never in this repository |
-| JieLi's Bluetooth libraries (`btctrler.a`, `btstack.a`, `wl_rf_common.a`, ...: binary only) and the few SDK sources and headers they need | Apache-2.0 | copied from your SDK checkout into `build/` by a build with `ble = true`; never in this repository |
+| JieLi's Bluetooth libraries (`btctrler.a`, `btstack.a`, `wl_rf_common.a`, ...: binary only) and the few SDK sources and headers they need | Apache-2.0 | copied from your SDK checkout into the build by a build with `ble = true`; never in this repository |

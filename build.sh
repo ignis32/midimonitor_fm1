@@ -1,5 +1,6 @@
 #!/bin/sh
-# MIDIMON's builds and tests, one command each:
+# MIDIMON's builds and tests, one command each, on fm1-base's build (fm1-base/: a pinned git submodule, felucca-bsp in
+# fm1-base/bsp; MIDIMON's changes to them in patches/, applied first: patches/README.md):
 #   sh build.sh            the firmware: app/build/midimon.fwsc
 #   sh build.sh test       the host simulator, then every script in app/tests (screens in app/build/host)
 #   sh build.sh screens    the README's screenshots, from docs/screens.txt into docs/
@@ -12,9 +13,14 @@ set -e
 cd "$(dirname "$0")"
 [ -f local.env ] && . ./local.env
 export JIELI_TOOLCHAIN AC79_SDK
+export X0X_FONTSET=terminus              # the screen's faces (fm1-base/tools/gen_font.py)
+[ "$1" = version ] && { cat VERSION; exit 0; }
+[ -f fm1-base/bsp/chip/usb.c ] || git submodule update --init --recursive
+sh tools/patches.sh apply
+B="python3 fm1-base/tools/build.py app"
 case "$1" in
 test)
-    python3 tools/build.py app --host
+    $B --host
     fail=0
     for t in app/tests/*.txt; do
         if app/build/host/midimon_host "$t" app/build/host > "app/build/host/$(basename "$t" .txt).log" 2>&1; then
@@ -28,19 +34,16 @@ test)
     exit $fail
     ;;
 screens)
-    python3 tools/build.py app --host
+    $B --host
     app/build/host/midimon_host docs/screens.txt docs
     ;;
 release)
-    python3 tools/build.py app --release "${2:-$(cat VERSION)}"
-    ;;
-version)
-    cat VERSION
+    $B --release "${2:-$(cat VERSION)}"
     ;;
 web)
-    python3 tools/build.py app --web
+    $B --web
     ;;
 *)
-    python3 tools/build.py app "$@"
+    $B "$@"
     ;;
 esac

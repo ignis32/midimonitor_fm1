@@ -74,9 +74,9 @@ are USB, BLE-P and BLE-C.
 
 ## Installing
 
-Install the stock firmware V15 first if the FM-1 runs another custom firmware, then MIDIMON, with the web
-installer or `python3 tools/fm1_install.py midimon-X.Y.fwsc`. An update of MIDIMON over MIDIMON needs no V15. Its
-settings live in the flash's data area, which V15 wipes; another firmware's settings at 0xFC000 are left alone.
+Install MIDIMON with the web installer or `python3 fm1-base/tools/fm1_install.py midimon-X.Y.fwsc`, over the stock
+firmware, another custom firmware (tested over Felucca) or an earlier MIDIMON. Its settings live in the flash's data
+area; another firmware's settings at 0xFC000 are left alone.
 
 Releases are built on GitHub by The Firmware Hub's shared workflow
 ([zvenson/fm1-build](https://github.com/zvenson/fm1-build)) and carry a build attestation. To check a file:
@@ -91,20 +91,20 @@ Releases are built on GitHub by The Firmware Hub's shared workflow
     sh build.sh release       # app/build/midimon-VERSION.fwsc (identity FM-1_88XXYYZZ)
     sh build.sh screens       # the screenshots above, from docs/screens.txt in the host simulator
 
-It needs JieLi's Linux toolchain and the AC79 SDK (AC79NN_SDK_V1.2.1, commit d179b44): `JIELI_TOOLCHAIN` and
-`AC79_SDK`, or a `local.env` beside `build.sh` that sets them. A release is a tag `vX.Y` matching `VERSION`; the
+Clone with `git clone --recursive` (or `build.sh` fetches the submodules itself). It needs JieLi's Linux toolchain
+and the AC79 SDK (AC79NN_SDK_V1.2.1, commit d179b44): `JIELI_TOOLCHAIN` and `AC79_SDK`, or a `local.env` beside
+`build.sh` that sets them. A release is a tag `vX.Y` matching `VERSION`; the
 workflow (`.github/workflows/release.yml`) builds, tests, attests and publishes it.
 
 ## Based on fm1-base
 
-This repository starts from [fm1-base](https://github.com/charlesvestal/fm1-base) by Charles Vestal, commit
-`71128a3` (2026-10-21), with [felucca-bsp](https://github.com/hugelton/felucca-bsp) commit `33cac69` in `bsp/`. Their
-code was copied in and is developed here (it is not a submodule): MIDIMON's changes to the platform are the MIDI tap
-(`device/midi_tap.c`: every byte from every source, stamped), the two Bluetooth links addressed apart
-(`TO_BLE_P`, `TO_BLE_C`) and the host simulator's `raw` command. fm1-base's files keep their licence (MPL-2.0) and
-their notices: see [LICENSING.md](LICENSING.md) and [CREDITS.md](CREDITS.md). Only what MIDIMON uses was kept (not
-fm1-base's template, examples, web pages, backup / mirror / site tools or its own tests); fm1-base's documentation
-is upstream.
+MIDIMON is an app (`app/`) on [fm1-base](https://github.com/charlesvestal/fm1-base) by Charles Vestal, a git
+submodule in `fm1-base/` pinned to an upstream commit, with [felucca-bsp](https://github.com/hugelton/felucca-bsp) by
+Leo Kuroshita inside it (`fm1-base/bsp/`). Both are used as upstream has them: the few changes MIDIMON needs in
+them are patches in [`patches/`](patches/README.md), each with what it does and why, applied before every build.
+Today that is the MIDI tap (every byte from every source, stamped: what a monitor needs and an instrument doesn't).
+Following an fm1-base update is: revert the patches, bump the submodule, apply them again. See
+[LICENSING.md](LICENSING.md) and [CREDITS.md](CREDITS.md).
 
 ## Licence
 

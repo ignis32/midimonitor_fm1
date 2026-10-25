@@ -1,0 +1,416 @@
+MIDI tap: every MIDI byte that comes in, from each source, as it came, stamped with the millisecond it arrived
+(plat.h plat_tap, device/midi_tap.c). plat_midi_in leaves out what an instrument does not need (SysEx, system common,
+active sensing, reset, stray bytes); the tap keeps all of it. Fed by the TRS jack (midi_uart.c), Bluetooth per link
+(le_midi.c's midi_parse -> radio.c ble_midi_raw: the computer's and the device's apart) and USB
+(patches/felucca-bsp/0001-midi-tap-usb.patch). The host simulator feeds it from "midi", "clock" and a new "raw"
+command (any bytes from any source: SysEx, running status, faults).
+Why MIDIMON needs it: it is a MIDI monitor; plat_midi_in drops what it must show.
+Applies to: fm1-base aa2b3bc. Upstream: not offered yet.
+diff --git a/ble/midi/le_midi.c b/ble/midi/le_midi.c
+index d8077f0..16afae8 100644
+--- a/ble/midi/le_midi.c
++++ b/ble/midi/le_midi.c
+@@ -47,6 +47,7 @@ const char log_tag_const_i_BLE_MIDI = 1;           /* the SDK keeps these in log
+ #define BLE_MIDI_CENTRAL 0
+ #endif
+ extern void ble_midi_receive(uint32_t pkt);
++extern void ble_midi_raw(const u8 *b, u16 len, int dev);   /* the whole packet, for the MIDI tap (radio.c) */
+ extern uint32_t shim_ms(void);
+ 
+ /* ---- the GATT database (the SDK's binary form: size, flags, handle, uuid, value). Flags: bit 1 read,
+@@ -162,6 +163,7 @@ static void midi_parse(const u8 *b, u16 len, u32 cable)   /* cable: 0 the centra
+ {
+     u16 i = 1;
+     u8 st = 0;
++    ble_midi_raw(b, len, cable != 0);
+     while (i < len) {
+         if (b[i] & 0x80) {                       /* a timestamp low byte, then maybe a status */
+             i++;
+diff --git a/device/midi_tap.c b/device/midi_tap.c
+new file mode 100644
+index 0000000..e3a8588
+--- /dev/null
++++ b/device/midi_tap.c
+@@ -0,0 +1,179 @@
++/* SPDX-License-Identifier: MPL-2.0
++ * Copyright (C) 2026 ignis32 */
++/* The MIDI tap: every MIDI byte that comes in, from each source, as it came, stamped with the millisecond it arrived
++ * (plat.h plat_tap). plat_midi_in leaves out what an instrument does not need (SysEx, system common, active sensing,
++ * reset, stray bytes); the tap keeps all of it, for a monitor. Part of the unity build on the device (before usb.c,
++ * midi_uart.c and radio.c, which feed it) and on the host (host/plat_host.c's "midi" and "raw").
++ *
++ * Producers: USB and the TRS jack from TIMER5, Bluetooth from the main loop under plat_lock. One consumer: the main
++ * loop (plat_tap). A full ring drops the new entry and counts it against its source. */
++#define FM1B_MIDI_TAP 1
++#define TAP_RING 1024u                 /* entries (a power of two) */
++static uint32_t tap_q[TAP_RING][2] PLAT_POOL;
++static volatile uint32_t tap_w, tap_r;
++static uint32_t tap_drop[NTAPS], tap_bytes[NTAPS];
++
++#define TAP_W(kind, src, n, b0, b1, b2) \
++    ((uint32_t)(b0) | (uint32_t)(b1) << 8 | (uint32_t)(b2) << 16 | (uint32_t)(n) << 24 | (uint32_t)(src) << 26 | \
++     (uint32_t)(kind) << 28)
++
++static void tap_put(uint32_t ms, uint32_t w)
++{
++    uint32_t at;
++    if (tap_w - tap_r >= TAP_RING) {
++        tap_drop[TAP_SRC(w)]++;
++        return;
++    }
++    at = tap_w % TAP_RING;
++    tap_q[at][0] = ms;
++    tap_q[at][1] = w;
++    __asm__ volatile("" ::: "memory");
++    tap_w++;
++}
++
++int plat_tap(uint32_t *ms, uint32_t *w)
++{
++    uint32_t at;
++    if (tap_r == tap_w)
++        return 0;
++    at = tap_r % TAP_RING;
++    *ms = tap_q[at][0];
++    *w = tap_q[at][1];
++    __asm__ volatile("" ::: "memory");
++    tap_r++;
++    return 1;
++}
++uint32_t plat_tap_drops(int src) { return src >= 0 && src < NTAPS ? tap_drop[src] : 0u; }
++uint32_t plat_tap_bytes(int src) { return src >= 0 && src < NTAPS ? tap_bytes[src] : 0u; }
++
++/* ---- a MIDI byte stream (the TRS jack; Bluetooth once its timestamps are taken out) into entries */
++typedef struct {
++    uint8_t cur;                       /* the status the data bytes belong to (0: none) */
++    uint8_t need, got, fresh;          /* data bytes it takes, got so far; fresh: its status byte was on the wire */
++    uint8_t d[2];
++    uint8_t sx, sxn, sxb[3];           /* inside SysEx; the bytes not yet put */
++} tap_parser_t;
++
++static uint32_t tap_need(uint32_t st)  /* data bytes after a status byte */
++{
++    if (st < 0xF0u)
++        return (st & 0xE0u) == 0xC0u ? 1u : 2u;
++    return st == 0xF2u ? 2u : st == 0xF1u || st == 0xF3u ? 1u : 0u;
++}
++
++static void tap_sx_flush(tap_parser_t *p, int src, uint32_t ms)
++{
++    if (p->sxn)
++        tap_put(ms, TAP_W(TK_SX, src, p->sxn, p->sxb[0], p->sxb[1], p->sxb[2]));
++    p->sxn = 0;
++}
++static void tap_sx_add(tap_parser_t *p, int src, uint32_t b, uint32_t ms)
++{
++    p->sxb[p->sxn++] = (uint8_t)b;
++    if (p->sxn == 3u)
++        tap_sx_flush(p, src, ms);
++}
++
++static void tap_byte(tap_parser_t *p, int src, uint32_t b, uint32_t ms)
++{
++    tap_bytes[src]++;
++    if (b >= 0xF8u) {                  /* real time: anywhere, even inside a message or SysEx */
++        if (p->sx)
++            tap_sx_flush(p, src, ms);
++        tap_put(ms, TAP_W(TK_MSG, src, 1, b, 0, 0));
++        return;
++    }
++    if (b == 0xF7u && p->sx) {         /* SysEx ends */
++        tap_sx_add(p, src, b, ms);
++        tap_sx_flush(p, src, ms);
++        p->sx = 0;
++        return;
++    }
++    if (b & 0x80u) {                   /* a status byte */
++        if (p->sx) {                   /* SysEx cut off without its F7 */
++            tap_sx_flush(p, src, ms);
++            tap_put(ms, TAP_W(TK_CUT, src, 1, 0xF0u, 0, 0));
++            p->sx = 0;
++        } else if (p->got) {           /* a message cut short: what came of it */
++            tap_put(ms, TAP_W(TK_CUT, src, 1u + p->got, p->cur, p->d[0], 0));
++        }
++        p->got = 0;
++        if (b == 0xF0u) {
++            p->sx = 1;
++            p->cur = 0;                /* SysEx ends running status */
++            tap_sx_add(p, src, b, ms);
++            return;
++        }
++        if (b == 0xF7u) {              /* an EOX with no SysEx */
++            tap_put(ms, TAP_W(TK_STRAY, src, 1, b, 0, 0));
++            p->cur = 0;
++            return;
++        }
++        p->need = (uint8_t)tap_need(b);
++        if (!p->need) {                /* F4 F5 F6: whole in one byte */
++            tap_put(ms, TAP_W(TK_MSG, src, 1, b, 0, 0));
++            p->cur = 0;
++            return;
++        }
++        p->cur = (uint8_t)b;
++        p->fresh = 1;
++        return;
++    }
++    if (p->sx) {
++        tap_sx_add(p, src, b, ms);
++        return;
++    }
++    if (!p->cur) {                     /* a data byte with no status to belong to */
++        tap_put(ms, TAP_W(TK_STRAY, src, 1, b, 0, 0));
++        return;
++    }
++    p->d[p->got++] = (uint8_t)b;
++    if (p->got < p->need)
++        return;
++    tap_put(ms, TAP_W(p->fresh ? TK_MSG : TK_RS, src, 1u + p->need, p->cur, p->d[0], p->need == 2u ? p->d[1] : 0u));
++    p->got = 0;
++    p->fresh = 0;
++    if (p->cur >= 0xF0u)               /* system common keeps no running status */
++        p->cur = 0;
++}
++
++static tap_parser_t tap_trs, tap_ble[2];
++
++/* ---- USB-MIDI event packets (byte 0 = cable / CIN), as they come */
++static void tap_usb(uint32_t pkt, uint32_t ms)
++{
++    uint32_t cin = pkt & 15u, b0 = pkt >> 8 & 0xFFu, b1 = pkt >> 16 & 0xFFu, b2 = pkt >> 24;
++    static const uint8_t N[16] = {0, 0, 2, 3, 3, 1, 2, 3, 3, 3, 3, 3, 2, 2, 3, 1};
++    uint32_t n = N[cin], kind = TK_MSG;
++    if (!n)
++        return;                        /* CIN 0, 1: reserved */
++    tap_bytes[TAP_USB] += n;
++    if (cin == 4u || cin == 6u || cin == 7u || (cin == 5u && b0 == 0xF7u))
++        kind = TK_SX;
++    else if (cin == 5u && b0 < 0xF1u)
++        kind = TK_STRAY;
++    else if (cin == 0xFu && b0 < 0x80u)
++        kind = TK_STRAY;               /* a single data byte (CIN F carries any byte) */
++    tap_put(ms, TAP_W(kind, TAP_USB, n, b0, n > 1u ? b1 : 0u, n > 2u ? b2 : 0u));
++}
++
++/* ---- a Bluetooth MIDI packet (a header, then timestamp + message, running status, SysEx across packets): the
++ * timestamps out, the MIDI bytes into the link's parser. dev: from the device the FM-1 connected to (else from the
++ * computer connected to the FM-1) */
++static void tap_ble_packet(const uint8_t *b, uint32_t len, int dev, uint32_t ms)
++{
++    tap_parser_t *p = &tap_ble[!!dev];
++    int src = dev ? TAP_BLE_DEV : TAP_BLE_HOST;
++    uint32_t i = 1;
++    if (len < 2u || !(b[0] & 0x80u))
++        return;
++    while (i < len) {
++        if (b[i] & 0x80u) {            /* a timestamp's low byte; a byte with bit 7 after it is a status (or F7) */
++            i++;
++            if (i < len && (b[i] & 0x80u))
++                tap_byte(p, src, b[i++], ms);
++            continue;
++        }
++        tap_byte(p, src, b[i++], ms);  /* data: the message's, running status's or SysEx's */
++    }
++}
+diff --git a/device/midi_uart.c b/device/midi_uart.c
+index b5b3642..7e5f63f 100644
+--- a/device/midi_uart.c
++++ b/device/midi_uart.c
+@@ -35,6 +35,7 @@ static uint32_t um_len(uint32_t s) { return (s & 0xE0u) == 0xC0u ? 1u : 2u; }
+ 
+ static void um_byte(uint32_t b)
+ {
++    tap_byte(&tap_trs, TAP_TRS, b, fm1_ms);       /* the monitor's copy, all of it (device/midi_tap.c) */
+     if (b >= 0xF8u) {                              /* real time: any time, keeps running status */
+         if (b == 0xF8u || b == 0xFAu || b == 0xFBu || b == 0xFCu) {
+             if (um_put(0xFu | b << 8))
+@@ -73,6 +74,8 @@ static void uart_midi_take(uint32_t n)
+     um.pend += n;
+     if (um.pend > UM_RING) {                       /* the DMA lapped us: wait for a whole new status */
+         um.drops += um.pend - UM_RING;
++        tap_drop[TAP_TRS] += um.pend - UM_RING;    /* (bytes, not entries: the monitor shows a loss either way) */
++        tap_trs = (tap_parser_t){0};
+         um.rd = (um.rd + um.pend - UM_RING) & (UM_RING - 1u);
+         um.pend = UM_RING;
+         um.st = um.got = um.sysex = 0;
+diff --git a/device/radio.c b/device/radio.c
+index 7bb5bb6..9aefc01 100644
+--- a/device/radio.c
++++ b/device/radio.c
+@@ -408,6 +408,12 @@ void ble_midi_receive(uint32_t pkt)               /* from the stack (in ble_poll
+         ble_rx_count++;
+     }
+ }
++void ble_midi_raw(const uint8_t *b, uint16_t len, int dev)   /* from the stack (in ble_poll): the MIDI tap's copy */
++{
++    uint32_t f = plat_lock();                     /* TIMER5 feeds the tap too (USB, the jack) */
++    tap_ble_packet(b, len, dev, fm1_ms);
++    plat_unlock(f);
++}
+ static int ble_midi_in(uint32_t *pkt, uint32_t *from)   /* from: its link's out, TO_BLE_HOST or TO_BLE_DEV */
+ {
+     uint32_t p;
+diff --git a/device/unity.c b/device/unity.c
+index 512374b..a7f630e 100644
+--- a/device/unity.c
++++ b/device/unity.c
+@@ -112,6 +112,7 @@ static volatile uint32_t fm1_ms;  /* milliseconds since boot (TIMER4-based, TIME
+ #endif
+ #define FELUCCA_MIRROR FM1B_MIRROR /* usb.c's ring for mirror.c's frames */
+ #define SXQ 128u                  /* the SysEx send ring, in packets: a whole screen-reader SAY (ANN_MAX + 9 bytes) */
++#include "midi_tap.c"             /* every MIDI byte in, as it came (plat_tap): fed by usb.c, midi_uart.c, radio.c */
+ #include "usb.c"
+ #ifndef FM1B_TRS
+ #define FM1B_TRS 1
+diff --git a/host/plat_host.c b/host/plat_host.c
+index 85620fd..d7a7847 100644
+--- a/host/plat_host.c
++++ b/host/plat_host.c
+@@ -19,6 +19,8 @@
+  *   master N                     MASTER pot 0..4096 (then 40 ms, as the device's smoothing settles)
+  *   midi [PORT] B0 B1 B2         incoming MIDI message (PORT: USB, the default, BLE, BLE-DEV or TRS; hex bytes;
+  *                                BLE is the computer's link, BLE-DEV the device's: both PORT_BLE, FM1B_BLE_CENTRAL)
++ *   raw [SRC] B0 B1 ..           bytes into the MIDI tap only (plat_tap), as SRC carries them: USB (the default), TRS,
++ *                                BLE (the computer's link) or DEV (the device's); any bytes, SysEx and faults too
+  *   ble connect | ble link | ble disconnect   a central listening, or linked and not yet listening (FM1B_BLE: the
+  *                                stand-in stack is ready a second after the start)
+  *   wav FILE | wavstop           start / stop recording the output
+@@ -132,6 +134,7 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
+ #include "touch.h"                     /* velocity and pressure from the keys (lib/touch.c) */
+ #endif
+ #include "fm1b_config.h"
++#include "midi_tap.c"                  /* every MIDI byte in, as it came (plat_tap): the scripts' "midi" and "raw" */
+ static const uint8_t HOST_WHITE_K[16] = PLAT_WHITE_KEYS, HOST_BLACK_K[11] = PLAT_BLACK_KEYS;
+ /* "spin": encoder steps exactly as given; an app that accelerates its knobs reads this (#ifdef PLAT_HOST) */
+ static uint8_t plat_host_exact;
+@@ -1037,6 +1040,59 @@ static uint32_t mk_pkt(const char *a, const char *b, const char *c)
+     return cin | st << 8 | d1 << 16 | d2 << 24;
+ }
+ static const char *const PORT_N[NPORTS] = {"USB", "BLE", "TRS"};
++static const char *const TAP_N[NTAPS] = {"USB", "TRS", "BLE", "DEV"};   /* "raw": BLE the computer, DEV the device */
++
++/* bytes into the tap as their source carries them: USB as a host packs them (USB-MIDI event packets), the jack as
++ * they are, Bluetooth in one packet (a timestamp before each status byte) */
++static void host_tap_raw(int src, const uint8_t *b, uint32_t n)
++{
++    uint32_t i = 0;
++    if (src == TAP_TRS) {
++        for (; i < n; i++)
++            tap_byte(&tap_trs, TAP_TRS, b[i], now_ms);
++    } else if (src == TAP_USB) {
++        while (i < n) {
++            uint32_t st = b[i], k = 1, pkt;
++            if (st == 0xF0u) {         /* SysEx: 3 bytes a packet, the last one says how many it holds */
++                for (;;) {
++                    uint32_t m = 0, end = 0, v[3] = {0, 0, 0};
++                    while (m < 3u && i < n) {
++                        v[m] = b[i++];
++                        end = v[m++] == 0xF7u;
++                        if (end)
++                            break;
++                    }
++                    pkt = (end || i >= n ? 4u + m : 4u) | v[0] << 8 | v[1] << 16 | v[2] << 24;
++                    if (end && m == 3u)
++                        pkt = (pkt & ~15u) | 7u;
++                    tap_usb(pkt, now_ms);
++                    if (end || i >= n)
++                        break;
++                }
++                continue;
++            }
++            k = st >= 0x80u ? 1u + tap_need(st) : 1u;
++            pkt = st >= 0xF8u || st < 0x80u ? 0xFu : st >= 0xF0u ? (k == 1u ? 5u : k) : st >> 4;
++            pkt |= st << 8;
++            if (k > 1u && i + 1u < n)
++                pkt |= (uint32_t)b[i + 1] << 16;
++            if (k > 2u && i + 2u < n)
++                pkt |= (uint32_t)b[i + 2] << 24;
++            tap_usb(pkt, now_ms);
++            i += k;
++        }
++    } else {
++        uint8_t p[512];
++        uint32_t m = 0;
++        p[m++] = 0x80u;
++        for (; i < n && m + 2u < sizeof p; i++) {
++            if (b[i] & 0x80u)
++                p[m++] = 0x80u;        /* the timestamp's low byte */
++            p[m++] = b[i];
++        }
++        tap_ble_packet(p, m, src == TAP_BLE_DEV, now_ms);
++    }
++}
+ /* this message went out to PORT since the last "out" (sent 1), or did not (sent 0); PORT BLE is the computer's link
+  * (TO_BLE_HOST), BLE-DEV the device's */
+ static int expect_out(const char *port, uint32_t pkt, int sent)
+@@ -1342,8 +1398,31 @@ int main(int argc, char **argv)
+             run_ms(40);                         /* as the device's smoothing settles */
+         } else if (!strcmp(cmd, "midi")) {
+             int dev = !strcmp(a, "BLE-DEV"), p = dev ? PORT_BLE : find_name(PORT_N, NPORTS, a);
+-            min_q[mi_w % MQ] = p < 0 ? mk_pkt(a, b, c) : mk_pkt(b, c, d) | (dev ? 0x10u : 0u);   /* cable 1 */
++            uint32_t pkt = p < 0 ? mk_pkt(a, b, c) : mk_pkt(b, c, d), st = pkt >> 8 & 0xFFu;
++            uint8_t raw[3] = {(uint8_t)st, (uint8_t)(pkt >> 16), (uint8_t)(pkt >> 24)};
++            min_q[mi_w % MQ] = pkt | (dev ? 0x10u : 0u);   /* cable 1 */
+             min_port[mi_w++ % MQ] = p < 0 ? PORT_USB : (uint32_t)p;
++            host_tap_raw(dev ? TAP_BLE_DEV : p == PORT_TRS ? TAP_TRS : p == PORT_BLE ? TAP_BLE_HOST : TAP_USB, raw,
++                         1u + tap_need(st));
++            run_ms(2);
++        } else if (!strcmp(cmd, "raw")) {             /* raw [SRC] HEX..: bytes as they come (SRC: USB TRS BLE DEV) */
++            uint8_t bytes[256];
++            uint32_t n = 0;
++            int s = find_name(TAP_N, NTAPS, a);
++            const char *q = plat_host_line + 3;
++            while (*q == ' ')
++                q++;
++            if (s >= 0)
++                q += strlen(a);
++            for (;;) {
++                char *e;
++                unsigned long v = strtoul(q, &e, 16);
++                if (e == q || n >= sizeof bytes)
++                    break;
++                bytes[n++] = (uint8_t)v;
++                q = e;
++            }
++            host_tap_raw(s < 0 ? TAP_USB : s, bytes, n);
+             run_ms(2);
+         } else if (!strcmp(cmd, "ble")) {
+             if (!strcmp(a, "connect") && ble_state == BLE_READY) {
+@@ -1472,6 +1551,7 @@ int main(int argc, char **argv)
+             for (; n > 0; n--) {
+                 min_port[mi_w % MQ] = PORT_USB;
+                 min_q[mi_w++ % MQ] = 0x0Fu | 0xF8u << 8;
++                tap_usb(0x0Fu | 0xF8u << 8, now_ms);
+                 run_ms((uint32_t)gap);
+             }
+ #if FM1B_MIRROR
+diff --git a/include/plat.h b/include/plat.h
+index 2140404..5e6282c 100644
+--- a/include/plat.h
++++ b/include/plat.h
+@@ -76,6 +76,26 @@ uint32_t plat_midi_out_link(void);     /* a number that changes at each new USB
+ uint32_t plat_midi_count(int port, int out);   /* messages through port PORT_* since the start (out: sent), real-time (clock...) left out */
+ uint32_t plat_midi_ago(int port, int out);     /* ms since the last one (0xFFFFFFFF: none yet) */
+ 
++/* The MIDI tap (device/midi_tap.c): every MIDI byte in, from each source, as it came (SysEx, system common, active
++ * sensing, reset and stray bytes too, which plat_midi_in leaves out), stamped with plat_ms at arrival. An entry is a
++ * word w: up to 3 bytes (TAP_B), how many (TAP_LEN), the source (TAP_SRC: TAP_*) and what it is (TAP_KIND: TK_*):
++ *   TK_MSG    a whole message, its status byte on the wire (real time, system common, channel)
++ *   TK_RS     a whole message by running status: TAP_B(w, 0) is the status it ran on, not on the wire
++ *   TK_SX     SysEx bytes, in order (F0 the first byte of the first, F7 the last of the last)
++ *   TK_CUT    a message cut off by the next status: what came of it (F0 alone: a SysEx with no F7)
++ *   TK_STRAY  a byte that belongs to nothing (a data byte with no status, an F7 with no SysEx)
++ * Bluetooth comes as two sources: the computer connected to the FM-1 (BLE_HOST), the device it connected to
++ * (BLE_DEV). Main loop only. */
++enum { TAP_USB, TAP_TRS, TAP_BLE_HOST, TAP_BLE_DEV, NTAPS };
++enum { TK_MSG, TK_RS, TK_SX, TK_CUT, TK_STRAY };
++#define TAP_B(w, i) ((w) >> (8u * (i)) & 0xFFu)
++#define TAP_LEN(w) ((w) >> 24 & 3u)
++#define TAP_SRC(w) ((w) >> 26 & 3u)
++#define TAP_KIND(w) ((w) >> 28)
++int plat_tap(uint32_t *ms, uint32_t *w);   /* 1 = the next entry, the millisecond it came */
++uint32_t plat_tap_drops(int src);       /* entries lost (the ring was full) since the start */
++uint32_t plat_tap_bytes(int src);       /* MIDI bytes in since the start */
++
+ /* Bluetooth MIDI (fm1.toml ble = true: FM1B_BLE 1): JieLi's BT libraries on fm1-base's shim (ble/), started at
+  * every boot unless the last Bluetooth run crashed (then by hand: plat_ble_start). The app gives it a store object,
+  * OBJ_BLE (the radio's address and pairing). Without it (FM1B_BLE 0, tools/build.py --no-ble) nothing of JieLi's is

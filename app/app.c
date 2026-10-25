@@ -27,7 +27,7 @@
 #define SET_MAGIC 0x4D4F4E33u            /* "MON3": the settings record; another magic loads defaults */
 /* thru's outputs, a bit each (settings_t routes) */
 enum { OUT_USB, OUT_BLE_P, OUT_BLE_C, NOUTS };
-static const uint32_t OUT_TO[NOUTS] = {TO_USB, TO_BLE_P, TO_BLE_C};
+static const uint32_t OUT_TO[NOUTS] = {TO_USB, TO_BLE_HOST, TO_BLE_DEV};   /* (BLE-P, BLE-C: fm1-base's links) */
 static const uint8_t SRC_SELF[NTAPS] = {1u << OUT_USB, 0, 1u << OUT_BLE_P, 1u << OUT_BLE_C};   /* not back to itself */
 typedef struct {
     uint32_t magic;

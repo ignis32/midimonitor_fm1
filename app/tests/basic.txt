@@ -277,8 +277,8 @@ ble connect
 wait 50
 midi USB B0 07 64
 wait 20
-expect_out BLE-P B0 07 64
-expect_out BLE-C B0 07 64
+expect_out BLE B0 07 64
+expect_out BLE-DEV B0 07 64
 shot thru.png
 # BLE-C on its own row: to BLE-P only
 spin SELECT 3
@@ -291,7 +291,7 @@ expect route3 2
 out
 raw DEV 90 40 64
 wait 20
-expect_out BLE-P 90 40 64
+expect_out BLE 90 40 64
 # a route's filter (EDIT): BLE-C -> BLE-P lets channel 1 notes by, nothing else
 tap EDIT
 wait 20
@@ -316,7 +316,7 @@ raw DEV 91 40 64
 raw DEV B0 07 64
 raw DEV 90 41 64
 wait 20
-expect_out BLE-P 90 41 64
+expect_out BLE 90 41 64
 tap EDIT
 wait 20
 expect rt_edit 0
