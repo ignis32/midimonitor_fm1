@@ -18,9 +18,9 @@
  *   FILTER page      white keys the channels, black keys the messages; OCT- none, OCT+ all, EDIT the defaults
  *   THRU page        SELECT a source; K1 K2 K3 its route to USB, BLE-P, BLE-C (any of them, not back to itself);
  *                    K4 thru on / off (the routes kept)
- *   GLO 1/3          K1 C3 / C4 for note 60, K2 the USB-C port: CLIENT (the computer's) or HOST of a USB MIDI device
- *                    (asks; never kept: every power-on, CLIENT; a host's device comes in as USB, and USB out, THRU too,
- *                    goes to it)
+ *   GLO 1/3          K1 C3 / C4 for note 60, K2 the USB-C port: DEVICE MODE (the computer's) or HOST MODE (a USB
+ *                    MIDI controller or synth on it; asks; never kept: every power-on, DEVICE MODE; what it sends comes
+ *                    in as USB, and USB out, THRU too, goes to it)
  *   GLO 2/3          Bluetooth (ble.c): K1 BLE-PERIPHERY on / off, K2 BLE-CENTRAL OFF / FIRST / CHOOSE, K3 the
  *                    device list (a pop-up: SELECT or K3 moves, OCT+ connects, OCT- closes, PLAY looks again), K4
  *                    reconnect to the chosen device (at power-on, and when it goes)
@@ -397,7 +397,7 @@ static void answer(int yes)              /* the question's answer */
             ui.held[s] = 0;
         views_clear();
         app_say("LOG", "CLEARED");
-    } else if (yes && ui.ask == ASK_USBH) {   /* never kept: every power-on is a CLIENT (the computer's, updates) */
+    } else if (yes && ui.ask == ASK_USBH) {   /* never kept: every power-on is DEVICE MODE (the computer's, updates) */
         plat_usb_host(plat_usb_host_state() == USBH_OFF);
     }
     ui.ask = ASK_NONE;
@@ -557,7 +557,7 @@ static void input(void)
             set.midc = set.midc == 3u ? 4u : 3u;
             changed();
         }
-        if (plat_enc(EN_K2) != 0 && !ui.ask) {   /* the USB-C port: CLIENT (the computer's) or HOST (asks) */
+        if (plat_enc(EN_K2) != 0 && !ui.ask) {   /* the USB-C port: DEVICE MODE or HOST MODE (asks) */
             ui.ask = ASK_USBH;
             ui.redraw_all = 1;
         }
@@ -693,8 +693,8 @@ void app_frame(void)
     input();
     speak();
     {   /* the USB host: what happened, in words */
-        static const char *const W[] = {"", "PORT: HOST", "PORT: CLIENT", "MIDI DEVICE IN", "NO MIDI DEVICE",
-                                        "LOW SPEED: NO", "DEVICE LOST"};
+        static const char *const W[] = {"", "HOST MODE", "DEVICE MODE", "MIDI IN", "NOT USB MIDI",
+                                        "LOW SPEED: NO", "MIDI LOST"};
         int ev;
         while ((ev = plat_usb_host_event()) != USBH_EV_NONE)
             app_say("USB", ev < (int)(sizeof W / sizeof W[0]) ? W[ev] : "?");

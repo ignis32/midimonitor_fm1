@@ -29,10 +29,11 @@ are USB, BLE-P and BLE-C.
 - **Four sources**, each its own: `USB`, `TRS` (the MIDI IN jack), `BLE-P` (BLE-Periphery: a computer or tablet
   connected to the FM-1 over Bluetooth) and `BLE-C` (BLE-Central: a Bluetooth MIDI device the FM-1 connected to).
   Both Bluetooth roles at once. On USB and on Bluetooth the FM-1 is `FM1_MONITOR`.
-- **USB port: CLIENT or HOST**: CLIENT, the computer's MIDI device, as usual; HOST, the host of a class-compliant
-  USB-MIDI device, a controller or a synth (GLO 1/3, K2; asks first, never kept: every power-on is CLIENT again, so
-  updates always work). A HOST's device comes in as `USB` (the footer says `HOST`), and USB out, THRU's too, goes to
-  it: a Bluetooth controller (BLE-C) can play a USB synth. Full-speed devices, alone or behind one hub; the FM-1
+- **USB port: DEVICE MODE or HOST MODE**: in device mode the FM-1 is a computer's MIDI device, as usual; in host
+  mode it is the host of a class-compliant USB-MIDI controller or synth (GLO 1/3, K2; asks first, never kept: every
+  power-on is device mode again, so updates always work). In host mode what that controller or synth sends comes in
+  as `USB` (the footer says `HOST`), and USB out, THRU's too, goes to it: a Bluetooth controller (BLE-C) can play a
+  USB synth. Full-speed devices, alone or behind one hub; the FM-1
   gives no power on the port, so use a powered hub or an OTG adapter that powers the device. The driver is Adrien
   Tibi's and Kerem Kilic's, from Melodee, ported to felucca-bsp in its
   [pull request #7](https://github.com/hugelton/felucca-bsp/pull/7).
@@ -60,7 +61,7 @@ are USB, BLE-P and BLE-C.
 - **THRU**: routes from each source to any of USB, BLE-P and BLE-C, each route with its own filter (channels and
   message types). The FM-1 as a Bluetooth MIDI bridge: a Bluetooth device to the computer over USB, a keyboard on
   the jack to an iPad, and so on. (SysEx goes to USB only, for now.)
-- **GLO**, three pages (GLO turns them): 1/3 C3 or C4 for note 60 and the USB port (CLIENT / HOST); 2/3 Bluetooth;
+- **GLO**, three pages (GLO turns them): 1/3 C3 or C4 for note 60 and the USB port (device mode / host mode); 2/3 Bluetooth;
   3/3 the skin (green, amber, cyan, white, red) and whether the FM-1's own SysEx over USB (screen reader, updates)
   is logged.
 - **Lights**: the source buttons flash as messages come in, the keys light with the notes held, PLAY blinks green on
@@ -77,7 +78,7 @@ are USB, BLE-P and BLE-C.
 | PLAY | pause / go on (what comes meanwhile is still logged). The device list: look again |
 | FX, SEL, ENV, LFO | show / hide USB, TRS, BLE-P, BLE-C |
 | K1 | LOG: HEX / HUMAN / BOTH. THRU: the source's route to USB. GLO 1/3: note 60. 2/3: BLE-Periphery on / off. 3/3: the skin |
-| K2 | LOG: the time. THRU: route to BLE-P. GLO 1/3: the USB port, CLIENT / HOST (asks). 2/3: BLE-Central OFF / FIRST / CHOOSE. 3/3: the platform's SysEx |
+| K2 | LOG: the time. THRU: route to BLE-P. GLO 1/3: the USB port, DEVICE MODE / HOST MODE (asks). 2/3: BLE-Central OFF / FIRST / CHOOSE. 3/3: the platform's SysEx |
 | K3 | LOG: the scanlines. THRU: route to BLE-C. GLO 2/3: the device list (BLE-Central CHOOSE), and move in it |
 | K4 | THRU: thru on / off. GLO 2/3: RECONNECT to the chosen device on / off |
 | EDIT | THRU: a route's filter, and back. FILTER: the default filter |

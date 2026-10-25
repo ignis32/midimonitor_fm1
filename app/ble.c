@@ -59,7 +59,7 @@ static void ble_task(void)
             ui.ble_try = 0;
         } else if (ui.ble_dev == BLE_DEV_READY) {   /* it went: FIRST looks again; CHOOSE does if RECONNECT is on (or
                                                      * another one was just chosen) */
-            app_say("BLE-C", "DEVICE LOST");
+            app_say("BLE-C", "LOST");
             ui.ble_try = ui.ble_try || (set.ble_c == BLEC_CHOOSE && set.ble_auto && set.ble_have);
             ui.ble_wait = now + 1000u;
         } else if ((ui.ble_dev == BLE_DEV_CONNECTING || ui.ble_dev == BLE_DEV_SEARCHING) && dev == BLE_DEV_OFF) {

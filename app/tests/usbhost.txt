@@ -1,4 +1,4 @@
-# The USB-C port: CLIENT (the computer's) or HOST of a USB MIDI device (GLO 1/3 K2, asks; never kept): the
+# The USB-C port: DEVICE MODE (the computer's) or HOST MODE (a USB MIDI device on it; GLO 1/3 K2, asks; never kept): the
 # platform's host simulated ("usbhost")
 wait 600
 expect usbh 0
@@ -41,7 +41,7 @@ shot usbh_log.png
 usbhost unplug
 wait 50
 expect usbh 1
-# back to CLIENT
+# back to DEVICE MODE
 tap GLO
 wait 50
 spin K2 1

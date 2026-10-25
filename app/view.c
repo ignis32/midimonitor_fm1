@@ -397,7 +397,7 @@ static void draw_thru(void)
 /* ------------------------------------------------------------------- GLO --- */
 static void draw_glo_ble(void)           /* GLO 2/3: Bluetooth (ble.c), both roles */
 {
-    static const char *const LABEL[4] = {"K1 BLE-PERIPHERY", "K2 BLE-CENTRAL", "K3 DEVICE", "K4 RECONNECT"};
+    static const char *const LABEL[4] = {"K1 BLE-PERIPHERY", "K2 BLE-CENTRAL", "K3 CONNECT TO", "K4 RECONNECT"};
     char dev[28], *d;
     const char *val[4];
     int32_t y = 2, i;
@@ -437,7 +437,7 @@ static void draw_glo_ble(void)           /* GLO 2/3: Bluetooth (ble.c), both rol
         cv_text(4 + 15 * CW, y, &FONT_XS, dev, G_GLOW);
     }
     y += 22;
-    cv_text(4, y, &FONT_XS, "FIRST: THE FIRST MIDI DEVICE SEEN", G_FAINT);
+    cv_text(4, y, &FONT_XS, "FIRST: THE FIRST ONE SEEN", G_FAINT);
     cv_text(4, y + 13, &FONT_XS, "CHOOSE: THE ONE CHOSEN (K3)", G_FAINT);
 }
 
@@ -459,8 +459,7 @@ static void draw_picker(void)
     s_cat(d, ")");
     cv_text(12, 9, &FONT_XS, t, G_HI);
     if (!n)
-        cv_text(14, 40, &FONT_XS, (plat_ms() / 500u) & 1u ? "LOOKING FOR MIDI DEVICES_" : "LOOKING FOR MIDI DEVICES",
-                G_DIM);
+        cv_text(14, 40, &FONT_XS, (plat_ms() / 500u) & 1u ? "SCANNING_" : "SCANNING", G_DIM);
     for (i = ui.pick_top; i < n && i < ui.pick_top + PICK_ROWS; i++) {
         int32_t y = 28 + (i - ui.pick_top) * 15;
         plat_ble_found(i, name, &rssi);
@@ -512,7 +511,7 @@ static void draw_glo2(void)              /* GLO 3/3: the look, what the log keep
 static void draw_glo(void)               /* GLO 1/3 (note 60, the USB port), 2/3 Bluetooth, 3/3 the look */
 {
     static const char *const LABEL[2] = {"K1 NOTE 60", "K2 USB PORT"};
-    static const char *const USBH[3] = {"CLIENT", "HOST: WAITING", "HOST: PLAYING"};
+    static const char *const USBH[3] = {"DEVICE MODE", "HOST MODE: WAITING", "HOST MODE: PLAYING"};
     static const char *const PAGE[3] = {"1/3", "BLUETOOTH 2/3", "3/3"};
     const char *val[2];
     int32_t y = 2, i;
@@ -534,10 +533,11 @@ static void draw_glo(void)               /* GLO 1/3 (note 60, the USB port), 2/3
     }
     y += 12;
     cv_text(4, y, &FONT_XS, "USB PORT", G_MID);
-    cv_text(4, y + 14, &FONT_XS, " CLIENT: A COMPUTER'S MIDI DEVICE", G_DIM);
-    cv_text(4, y + 27, &FONT_XS, " HOST: A USB MIDI DEVICE'S, POWERED", G_DIM);
-    cv_text(4, y + 40, &FONT_XS, "       BY A HUB OR AN OTG ADAPTER", G_DIM);
-    cv_text(4, y + 53, &FONT_XS, " EVERY POWER-ON: CLIENT", G_DIM);
+    cv_text(4, y + 14, &FONT_XS, " DEVICE MODE: A COMPUTER'S, AS USUAL", G_DIM);
+    cv_text(4, y + 27, &FONT_XS, " HOST MODE: A USB MIDI CONTROLLER", G_DIM);
+    cv_text(4, y + 40, &FONT_XS, "   OR SYNTH ON IT, POWERED BY A HUB", G_DIM);
+    cv_text(4, y + 53, &FONT_XS, "   OR AN OTG ADAPTER", G_DIM);
+    cv_text(4, y + 66, &FONT_XS, " EVERY POWER-ON: DEVICE MODE", G_DIM);
     cv_text(4, y + 80, &FONT_XS, "GLO: BLUETOOTH, THEN THE LOOK", G_FAINT);
 }
 
@@ -610,7 +610,7 @@ static void draw_body(void)
         if (ui.ask == ASK_CLEAR) {
             s_cat(q, "CLEAR THE LOG?");
         } else if (ui.ask == ASK_USBH) {   /* (and what the port stops being) */
-            s_cat(q, plat_usb_host_state() == USBH_OFF ? "USB PORT: HOST?" : "USB PORT: CLIENT?");
+            s_cat(q, plat_usb_host_state() == USBH_OFF ? "USB: HOST MODE?" : "USB: DEVICE MODE?");
             s_cat(name, plat_usb_host_state() == USBH_OFF ? "DISCONNECTS THE COMPUTER" : "BACK TO THE COMPUTER");
         }
         cv_rect(20, 60, 200, 64, G_BG);
