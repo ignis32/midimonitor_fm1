@@ -2,8 +2,8 @@
 name = "MIDIMON"               # APP_NAME is in app.h; this names the build's files
 id_prefix = "FM-1_88"          # package identity: dev FM-1_8800, releases FM-1_88XXYYZZ
 usb_manufacturer = "fm1-midimonitor"
-usb_product = "FM1_MONITOR"     # how a computer lists it, on USB and on Bluetooth alike
-ble_name = "FM1_MONITOR"        # (patches/fm1-base/0003: shortened in the advertising packet, whole in the scan response)
+usb_product = "MIDIMON FM-1"    # "FM-1" in it: the firmware installers find the FM-1 on USB by it
+ble_name = "FM1_MONITOR"        # Bluetooth (patches/fm1-base/0003: shortened in the advertising packet, whole in the scan response)
 o2 = []                        # separate units compiled at -O2
 words = "words.tsv"
 fontset = "terminus"           # the terminal look: Terminus bitmap fonts (assets/fonts)

@@ -32,7 +32,8 @@ are USB, BLE-P and BLE-C.
 
 - **Four sources**, each its own: `USB`, `TRS` (the MIDI IN jack), `BLE-P` (BLE-Periphery: a computer or tablet
   connected to the FM-1 over Bluetooth) and `BLE-C` (BLE-Central: a Bluetooth MIDI device the FM-1 connected to).
-  Both Bluetooth roles at once. On USB and on Bluetooth the FM-1 is `FM1_MONITOR`.
+  Both Bluetooth roles at once. The FM-1 is `FM1_MONITOR` on Bluetooth and `MIDIMON FM-1` on USB (with "FM-1" in
+  it, which the firmware installers look for).
 - **USB port: DEVICE MODE or HOST MODE**: in device mode the FM-1 is a computer's MIDI device, as usual; in host
   mode it is the host of a class-compliant USB-MIDI controller or synth (GLO 1/3, K2; asks first, never kept: every
   power-on is device mode again, so updates always work). In host mode what that controller or synth sends comes in

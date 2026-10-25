@@ -10,7 +10,7 @@ address (plat_ble_found_addr).
   list that tells devices of one name apart and for reconnecting to the one chosen. The host simulator: "ble devices
   N" (N stand-ins, C0:FF:EE:00:10:0i) and "ble lose" (the connected one goes away).
 Why MIDIMON needs it: its BLUETOOTH page (BLE-P and BLE-C apart, a device list with addresses, reconnecting to the
-chosen device), and the name FM1_MONITOR on Bluetooth as on USB.
+chosen device), and the name FM1_MONITOR on Bluetooth (USB keeps "MIDIMON FM-1": the installers look for "FM-1").
 Applies to: fm1-base aa2b3bc, after 0001 and 0002. Upstream: not offered yet.
 diff --git a/ble/midi/le_midi.c b/ble/midi/le_midi.c
 index 16afae8..706226c 100644

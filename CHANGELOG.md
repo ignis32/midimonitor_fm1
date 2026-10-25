@@ -1,5 +1,13 @@
 # Changes
 
+## Next
+
+- **USB name back to `MIDIMON FM-1`**: 0.3's `FM1_MONITOR` on USB lost the "FM-1" the firmware installers look
+  for. Bluetooth stays `FM1_MONITOR`.
+- **Battery** on GLO 1/3: a percentage (an estimate), a bar, the volts and the raw reading; the reading now follows
+  the battery (fm1-base's average stopped moving within 15 of its first value until the next power-on).
+- **Scanlines** moved to GLO 3/3 (K3); K3 on the LOG tab is free.
+
 ## 0.3
 
 **The FM-1 as `FM1_MONITOR`.** It shows up under that name on USB and on Bluetooth (was "MIDIMON FM-1" and "FM-1").
