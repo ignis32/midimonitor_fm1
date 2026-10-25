@@ -2,7 +2,7 @@ MIDI tap: every MIDI byte that comes in, from each source, as it came, stamped w
 (plat.h plat_tap, device/midi_tap.c). plat_midi_in leaves out what an instrument does not need (SysEx, system common,
 active sensing, reset, stray bytes); the tap keeps all of it. Fed by the TRS jack (midi_uart.c), Bluetooth per link
 (le_midi.c's midi_parse -> radio.c ble_midi_raw: the computer's and the device's apart) and USB
-(patches/felucca-bsp/0001-midi-tap-usb.patch). The host simulator feeds it from "midi", "clock" and a new "raw"
+(patches/felucca-bsp/0002-midi-tap-usb.patch). The host simulator feeds it from "midi", "clock" and a new "raw"
 command (any bytes from any source: SysEx, running status, faults).
 Why MIDIMON needs it: it is a MIDI monitor; plat_midi_in drops what it must show.
 Applies to: fm1-base aa2b3bc. Upstream: not offered yet.

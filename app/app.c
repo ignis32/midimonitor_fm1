@@ -20,7 +20,8 @@
  *                    K4 thru on / off (the routes kept)
  *   GLO page         K1 Bluetooth on / off (asks), K2 a Bluetooth device (scans while the page is up; turn: asks to
  *                    connect to the one picked, or to let the connected one go), K3 C3 / C4 for note 60, K4 the
- *                    USB-C port a USB MIDI host or the computer's (asks; never kept: every power-on, the computer's)
+ *                    USB-C port a USB MIDI host or the computer's (asks; never kept: every power-on, the computer's;
+ *                    a host's device comes in as USB, and USB out, THRU too, goes to it)
  *   GLO page 2       K1 the skin (the colours), K2 the platform's own SysEx over USB logged or not
  * The lights: the source buttons flash with what comes in (dim: hidden); the keys light with the notes held (F3..G5,
  * OCT- / OCT+: some below / above); PLAY green on the beat of a clock coming in, red while paused or on an error. */
@@ -690,8 +691,8 @@ void app_frame(void)
     input();
     speak();
     {   /* the USB host: what happened, in words */
-        static const char *const W[] = {"", "HOST ON", "HOST OFF", "CONTROLLER IN", "NO MIDI DEVICE",
-                                        "LOW SPEED: NO", "CONTROLLER LOST"};
+        static const char *const W[] = {"", "HOST ON", "HOST OFF", "MIDI DEVICE IN", "NO MIDI DEVICE",
+                                        "LOW SPEED: NO", "DEVICE LOST"};
         int ev;
         while ((ev = plat_usb_host_event()) != USBH_EV_NONE)
             app_say("USB", ev < (int)(sizeof W / sizeof W[0]) ? W[ev] : "?");

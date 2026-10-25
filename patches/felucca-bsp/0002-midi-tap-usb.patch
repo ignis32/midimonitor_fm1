@@ -1,0 +1,36 @@
+MIDI tap, USB side: every USB-MIDI event packet that comes in is copied to fm1-base's MIDI tap (device/midi_tap.c,
+patches/fm1-base/0001-midi-tap.patch) before it is sorted, so a monitor sees SysEx, system common, active sensing
+and reset too, which plat_midi_in leaves out: from a computer (usb.c midi_in_event) and from a USB-MIDI device on the
+host port (usb_host.c uh_poll, from 0001-usb-midi-host-pr7.patch: its filter keeps SysEx from the app, not from the
+tap). Only when FM1B_MIDI_TAP is defined (fm1-base's unity.c, with the tap).
+Why MIDIMON needs it: it is a MIDI monitor; plat_midi_in drops what it must show.
+Applies to: felucca-bsp d6b8f77 with 0001-usb-midi-host-pr7.patch (fm1-base aa2b3bc). Upstream: not offered yet.
+diff --git a/chip/usb.c b/chip/usb.c
+index 45574af..00314b7 100644
+--- a/chip/usb.c
++++ b/chip/usb.c
+@@ -974,6 +974,9 @@ static void sysex_byte(uint8_t b)
+ static void midi_in_event(uint32_t pkt)                 /* one USB-MIDI event packet */
+ {
+     uint32_t cin = pkt & 15u, st = (pkt >> 8) & 0xFFu;
++#ifdef FM1B_MIDI_TAP
++    tap_usb(pkt, fm1_ms);                               /* the monitor's copy, all of it (device/midi_tap.c) */
++#endif
+     if (cin >= 4u && cin <= 7u) {
+         uint32_t k, nb = cin == 4u || cin == 7u ? 3u : cin == 6u ? 2u : 1u;
+         for (k = 0; k < nb; k++)
+diff --git a/chip/usb_host.c b/chip/usb_host.c
+index d07bded..3a2a351 100644
+--- a/chip/usb_host.c
++++ b/chip/usb_host.c
+@@ -471,6 +471,10 @@ static void uh_poll(void)
+         for (i = 0; i + 3u < n; i += 4u) {
+             uint32_t p = uh_midi_ok((uint32_t)uh_rx[i] | (uint32_t)uh_rx[i + 1] << 8 |
+                                     (uint32_t)uh_rx[i + 2] << 16 | (uint32_t)uh_rx[i + 3] << 24);
++#ifdef FM1B_MIDI_TAP
++            tap_usb((uint32_t)uh_rx[i] | (uint32_t)uh_rx[i + 1] << 8 | (uint32_t)uh_rx[i + 2] << 16 |
++                    (uint32_t)uh_rx[i + 3] << 24, fm1_ms);   /* the monitor's copy: all of it, SysEx too */
++#endif
+             if (p) {
+                 midi_enqueue(p, 1u);
+                 uh.events++;

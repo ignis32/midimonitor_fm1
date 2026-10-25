@@ -29,12 +29,13 @@ are USB, BLE-P and BLE-C.
 - **Four sources**, each its own: `USB`, `TRS` (the MIDI IN jack), `BLE-P` (a computer or tablet connected to the
   FM-1 over Bluetooth: the FM-1 is the peripheral) and `BLE-C` (a Bluetooth MIDI device the FM-1 connected to: the
   FM-1 is the central). Both Bluetooth roles at once.
-- **USB host** (new, not yet tried on hardware): the USB-C port can host a class-compliant USB-MIDI controller
-  instead of talking to a computer (GLO, K4; asks first, never kept: every power-on the port is the computer's
-  again, so updates always work). Its MIDI comes in as `USB` (the footer says `HOST`). Full-speed devices, alone or
+- **USB host** (new, not yet tried on hardware): the USB-C port can host a class-compliant USB-MIDI device, a
+  controller or a synth, instead of talking to a computer (GLO, K4; asks first, never kept: every power-on the port
+  is the computer's again, so updates always work). Its MIDI comes in as `USB` (the footer says `HOST`), and USB
+  out, THRU's too, goes to it: a Bluetooth controller (BLE-C) can play a USB synth. Full-speed devices, alone or
   behind one hub; the FM-1 gives no power on the port, so use a powered hub or an OTG adapter that powers the
-  controller. No MIDI out to the controller. The driver is Adrien Tibi's, from Melodee
-  ([#75](https://github.com/keremimo/melodee/pull/75)).
+  device. The driver is Adrien Tibi's and Kerem Kilic's, from Melodee, ported to felucca-bsp in its
+  [pull request #7](https://github.com/hugelton/felucca-bsp/pull/7).
 - **Everything as it came**: SysEx (assembled, the maker named, its length), system common, clock and transport,
   active sensing, reset, running status (marked), and the faults: a stray byte, a message cut short, a SysEx without
   its end, messages lost to a full buffer.
