@@ -1,7 +1,22 @@
 # MIDIMON for the M-VAVE FM-1
 
-A MIDI monitor and thru router for the M-VAVE FM-1, in a green phosphor terminal's look. It shows every MIDI message
-that comes in from USB, the TRS jack and Bluetooth, in hex, in words or both, and passes MIDI on between them.
+A MIDI monitor firmware for the M-VAVE FM-1, in a green phosphor terminal's look.
+
+1. It watches notes, CCs, clock and other messages, with filtering, from TRS, USB, USB host, BLE peripheral and BLE
+   central. USB and USB host are mutually exclusive, and in USB host mode the FM-1 can't power the connected MIDI
+   device: it needs its own power (another FM-1, for example). BLE peripheral and BLE central work in parallel, so
+   the FM-1 can sit in the middle between a BLE MIDI controller and a synth, for example.
+2. It routes MIDI messages between all these ports (except TRS, which is input only) as a matrix, with many-to-many
+   routing and filtering by message type and channel.
+
+I already use it to debug my other FM-1 and a bunch of BLE MIDI controllers, and it also works as an improvised BLE
+MIDI dongle.
+
+**Before you install:** this is a custom firmware, and it might brick your FM-1 if there's a hidden bug somewhere,
+which is always possible given the multiple layers of AI-written code involved. If you don't have an RP2040 dongle or
+another way to recover from a hard brick, install the custom bootloader with
+[m-flasher](https://github.com/jvitkauskas/m-flasher/releases) first, so you can unbrick the FM-1 if something goes
+wrong. So far it hasn't bricked either of my two FM-1s.
 
 **Status: early (0.4).** It runs on the FM-1. Expect changes.
 
