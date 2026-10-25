@@ -20,6 +20,9 @@ itself: `BLE-C`). The THRU screenshot above is one such setup:
   the computer at all.
 - `USB → BLE-C`: the DAW plays a Bluetooth synth.
 
+With the USB port in host mode there is no computer at all: `BLE-C → USB` lets a Bluetooth controller play a USB
+synth (or a USB controller, `USB → BLE-C`, a Bluetooth synth), the FM-1 in between showing what passes.
+
 Any source can go to any number of outputs (never back to itself), and each route has its own filter: only channel 1
 notes from the Bluetooth controller, no clock to the iPad, and so on. The FM-1 has no MIDI OUT jack, so the outputs
 are USB, BLE-P and BLE-C.
@@ -116,11 +119,15 @@ MIDIMON is an app (`app/`) on [fm1-base](https://github.com/charlesvestal/fm1-ba
 submodule in `fm1-base/` pinned to an upstream commit, with [felucca-bsp](https://github.com/hugelton/felucca-bsp) by
 Leo Kuroshita inside it (`fm1-base/bsp/`). Both are used as upstream has them: the few changes MIDIMON needs in
 them are patches in [`patches/`](patches/README.md), each with what it does and why, applied before every build.
-Today that is the MIDI tap (every byte from every source, stamped: what a monitor needs and an instrument doesn't).
+Today they are: the MIDI tap (every byte from every source, stamped: what a monitor needs and an instrument doesn't),
+the USB MIDI host (felucca-bsp's own pull request #7, carried until it is merged) and its API for apps, and Bluetooth
+(BLE-Periphery on and off, the name `FM1_MONITOR`, the found devices' addresses).
 Following an fm1-base update is: revert the patches, bump the submodule, apply them again. See
 [LICENSING.md](LICENSING.md) and [CREDITS.md](CREDITS.md).
 
 ## Licence
 
 MPL-2.0, as fm1-base (`LICENSE`). A build with Bluetooth links JieLi's binary Bluetooth libraries from the AC79 SDK
-(Apache-2.0), taken from the SDK at build time and never kept in this repository.
+(Apache-2.0), taken from the SDK at build time and never kept in this repository, so no GPL code may be in it. The
+USB MIDI host comes from Melodee, which is GPL-3.0-only; it is MPL-2.0 here because both its authors said so in
+writing, quoted with links in [LICENSING.md](LICENSING.md).
