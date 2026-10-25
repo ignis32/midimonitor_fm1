@@ -65,9 +65,13 @@ are USB, BLE-P and BLE-C.
 - **THRU**: routes from each source to any of USB, BLE-P and BLE-C, each route with its own filter (channels and
   message types). The FM-1 as a Bluetooth MIDI bridge: a Bluetooth device to the computer over USB, a keyboard on
   the jack to an iPad, and so on. (SysEx goes to USB only, for now.)
-- **GLO**, three pages (GLO turns them): 1/3 C3 or C4 for note 60 and the USB port (device mode / host mode); 2/3 Bluetooth;
-  3/3 the skin (green, amber, cyan, white, red) and whether the FM-1's own SysEx over USB (screen reader, updates)
-  is logged.
+- **GLO**, three pages (GLO turns them): 1/3 C3 or C4 for note 60, the USB port (device mode / host mode) and the
+  battery; 2/3 Bluetooth; 3/3 the skin (green, amber, cyan, white, red), the scanlines and whether the FM-1's own
+  SysEx over USB (screen reader, updates) is logged.
+- **Battery** (GLO 1/3): a percentage, a bar and the volts. An estimate: the FM-1's battery divider and converter
+  reference are not documented, so the reading is taken as against the 3.2 V I/O supply through 1:2 (which puts the
+  stock firmware's bar thresholds at 3.32, 3.51 and 3.70 V) and turned into a percentage on a lithium cell's
+  discharge curve. The raw reading is shown too. On USB power it shows what the charging cell reads.
 - **Lights**: the source buttons flash as messages come in, the keys light with the notes held, PLAY blinks green on
   the beat of a clock coming in and turns red while paused or on an error.
 
@@ -83,7 +87,7 @@ are USB, BLE-P and BLE-C.
 | FX, SEL, ENV, LFO | show / hide USB, TRS, BLE-P, BLE-C |
 | K1 | LOG: HEX / HUMAN / BOTH. THRU: the source's route to USB. GLO 1/3: note 60. 2/3: BLE-Periphery on / off. 3/3: the skin |
 | K2 | LOG: the time. THRU: route to BLE-P. GLO 1/3: the USB port, DEVICE MODE / HOST MODE (asks). 2/3: BLE-Central OFF / FIRST / CHOOSE. 3/3: the platform's SysEx |
-| K3 | LOG: the scanlines. THRU: route to BLE-C. GLO 2/3: the device list (BLE-Central CHOOSE), and move in it |
+| K3 | THRU: route to BLE-C. GLO 2/3: the device list (BLE-Central CHOOSE), and move in it. 3/3: the scanlines |
 | K4 | THRU: thru on / off. GLO 2/3: RECONNECT to the chosen device on / off |
 | EDIT | THRU: a route's filter, and back. FILTER: the default filter |
 | HOME | home: the LOG tab from any page, then the log itself from KEYS, CC, CHANS or CLOCK; on the log, clear it (asks) |

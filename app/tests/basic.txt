@@ -184,7 +184,17 @@ expect midc 3
 spin K1 1
 wait 20
 expect midc 4
+# the battery's estimate: 640 of 1023 is ~4.00 V, 80 %; 531 (the stock firmware's last bar) ~3.32 V, 0 %
+expect batt_pc 80
 shot glo.png
+battery 531
+wait 600
+expect batt_pc 0
+battery 600
+wait 600
+expect batt_pc 40
+battery 640
+wait 20
 
 # GLO 2/3, Bluetooth: BLE-P on, BLE-C CHOOSE, RECONNECT on by default
 tap GLO
@@ -274,6 +284,13 @@ tap GLO
 wait 50
 expect tab 4
 expect glo_page 2
+expect scan 1
+spin K3 1
+wait 50
+expect scan 0
+spin K3 1
+wait 50
+expect scan 1
 spin K1 1
 wait 50
 expect skin 1

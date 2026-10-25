@@ -1,0 +1,61 @@
+The battery's reading for an app: plat_battery_raw() (include/plat.h), the smoothed 10-bit reading on the battery's
+divider that plat_battery's bars come from (device/plat_fm1.c's batt_raw, read ten times a second by the main loop).
+The host simulator gives 640, or what "battery RAW" sets.
+Why MIDIMON needs it: a battery percentage (GLO 1/3), not only the stock firmware's three bars.
+Applies to: fm1-base aa2b3bc, after 0001-0003. Upstream: not offered yet.
+diff --git a/device/plat_fm1.c b/device/plat_fm1.c
+index a4f390a..d4f6897 100644
+--- a/device/plat_fm1.c
++++ b/device/plat_fm1.c
+@@ -61,6 +61,7 @@ int plat_battery(void)                           /* (a level moves once the read
+         batt_bars--;
+     return batt_bars;
+ }
++int plat_battery_raw(void) { return batt_raw; }
+ 
+ /* LEDs: the picture is built off-line and copied one byte per column (Felucca: clearing
+  * and relighting would let the 10 kHz scan catch the dark gap and flicker) */
+diff --git a/host/plat_host.c b/host/plat_host.c
+index 771b2a5..be58e02 100644
+--- a/host/plat_host.c
++++ b/host/plat_host.c
+@@ -24,6 +24,7 @@
+  *   ble connect | ble link | ble disconnect   a central listening, or linked and not yet listening (FM1B_BLE: the
+  *                                stand-in stack is ready a second after the start)
+  *   wav FILE | wavstop           start / stop recording the output
++ *   battery RAW                  the battery's reading (plat_battery_raw; 640 at the start)
+  *   usbhost plug | nomidi | unplug   a USB-MIDI device (or one without MIDI) on the port, once the app has made it
+  *                                a host (plat_usb_host); its MIDI then comes as "midi USB" / "raw USB"
+  *   peakreset                    restart the output peak (expect peak_db_min / peak_db_max)
+@@ -175,6 +176,8 @@ int32_t plat_enc(int role)
+ }
+ uint32_t plat_master(void) { return mirror_in_master(master); }
+ int plat_battery(void) { return 3; }   /* (the host and the emulator: full) */
++static int host_batt_raw = 640;        /* "battery RAW": the reading plat_battery_raw gives */
++int plat_battery_raw(void) { return host_batt_raw; }
+ /* the lights ("leds"): bright, and dim (glow 0: none); PLAY's green counts as PLAY */
+ void plat_lights(uint32_t b, uint32_t k, uint32_t db, uint32_t dk, int glow)
+ {
+@@ -1602,6 +1605,8 @@ int main(int argc, char **argv)
+                 usbh_ev = !strcmp(a, "plug") ? USBH_EV_MIDI : !strcmp(a, "nomidi") ? USBH_EV_NOMIDI : USBH_EV_LOST;
+             }
+             run_ms(2);
++        } else if (!strcmp(cmd, "battery")) {         /* battery RAW: the battery's reading (plat_battery_raw) */
++            host_batt_raw = atoi(a);
+         } else if (!strcmp(cmd, "flash_fail")) {
+             store_fail = atoi(a);
+         } else if (!strcmp(cmd, "clock")) {           /* clock N [MS]: N MIDI clocks in (F8), MS apart (default 21) */
+diff --git a/include/plat.h b/include/plat.h
+index 65596e9..57da93c 100644
+--- a/include/plat.h
++++ b/include/plat.h
+@@ -37,6 +37,9 @@ int32_t plat_enc(int role);            /* detents since the last call, + = clock
+ uint32_t plat_master(void);            /* MASTER pot's position, 0..4096 (the render gets it as a gain: APP_GAIN) */
+ int plat_battery(void);                /* the battery: 0 (empty) .. 3 (full), 4 a USB host powers the FM-1, -1 not read
+                                         * yet (the keys' readings own the converter: APP_KEY_SENSE) */
++int plat_battery_raw(void);            /* its reading, smoothed: 0..1023 of the 10-bit converter on the battery's
++                                        * divider (PB1), 0 not read yet; for an app's own estimate (the bars above use
++                                        * the stock firmware's thresholds, 531 561 591) */
+ 
+ /* lights: bright buttons and keys, and dim ones (a short pulse each scan frame; a bright bit wins); glow 0 the dim
+  * ones off, 1 low, 2 high. Bit NB in buttons / dim_buttons is PLAY's second, green LED */

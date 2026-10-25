@@ -46,6 +46,7 @@ whether it has been offered upstream. Patched files are MPL-2.0 as the originals
 | `fm1-base/0001-midi-tap.patch` | the MIDI tap (`plat_tap`, `device/midi_tap.c`): every byte from USB, the jack and each Bluetooth link, as it came; the simulator's `raw` |
 | `fm1-base/0002-usb-host.patch` | the USB host for apps: `FM1B_USB_HOST`, `plat_usb_host` / `_state` / `_event`, the main loop's `usb_host_task`, the simulator's `usbhost` |
 | `fm1-base/0003-ble-advertise-name-addr.patch` | Bluetooth: `plat_ble_advertise` (BLE-Periphery on / off, from tornado), fm1.toml `ble_name` up to 29 characters (whole in the scan response), `plat_ble_found_addr`; the simulator's `ble devices N`, `ble lose` |
+| `fm1-base/0004-battery-raw.patch` | `plat_battery_raw`: the battery's smoothed reading, for MIDIMON's percentage; the simulator's `battery RAW` |
 
 Upstream took in what MIDIMON's earlier copy of fm1-base changed for Bluetooth (each link addressed apart:
 `TO_BLE_HOST`, `TO_BLE_DEV`; the send stall per link), so those are no longer patches.

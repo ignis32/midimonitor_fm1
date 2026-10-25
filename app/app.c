@@ -12,7 +12,7 @@
  *   SELECT           scroll the log back (the view stops; back to the end: live again)
  *   PLAY             pause / go on (the log keeps everything that comes meanwhile)
  *   FX SEL ENV LFO   show / hide USB, TRS, BLE (the computer), DEV (the Bluetooth device)
- *   K1 K2 K3         HEX / HUMAN / BOTH; the time (+ms, since power-on, none); the scanlines
+ *   K1 K2            HEX / HUMAN / BOTH; the time (+ms, since power-on, none)
  *   HOME             home: the LOG tab, then the log itself (from KEYS, CC..); on the log, clear it (asks: OCT+ yes,
  *                    OCT- no)
  *   SAVE             keep the settings (lit: changed)
@@ -25,7 +25,8 @@
  *   GLO 2/3          Bluetooth (ble.c): K1 BLE-PERIPHERY on / off, K2 BLE-CENTRAL OFF / FIRST / CHOOSE, K3 the
  *                    device list (a pop-up: SELECT or K3 moves, OCT+ connects, OCT- closes, PLAY looks again), K4
  *                    reconnect to the chosen device (at power-on, and when it goes)
- *   GLO 3/3          K1 the skin (the colours), K2 the platform's own SysEx over USB logged or not
+ *   GLO 3/3          K1 the skin (the colours), K2 the platform's own SysEx over USB logged or not, K3 the scanlines
+ *                    (GLO 1/3 shows the battery too: a percentage, estimated: view.c batt_percent)
  * The lights: the source buttons flash with what comes in (dim: hidden); the keys light with the notes held (F3..G5,
  * OCT- / OCT+: some below / above); PLAY green on the beat of a clock coming in, red while paused or on an error. */
 
@@ -558,7 +559,11 @@ static void input(void)
             set.show_sys = (uint8_t)!set.show_sys;
             changed();
         }
-        plat_enc(EN_K3);
+        if (plat_enc(EN_K3) != 0 && !ui.ask) {
+            set.scan = (uint8_t)!set.scan;
+            changed();
+            app_say("SCANLINES", set.scan ? "ON" : "OFF");
+        }
         plat_enc(EN_K4);
         return;
     }
@@ -610,12 +615,8 @@ static void input(void)
         changed();
         app_say("TIME", T[set.tmode]);
     }
-    if (plat_enc(EN_K3) != 0) {
-        set.scan = (uint8_t)!set.scan;
-        changed();
-        app_say("SCANLINES", set.scan ? "ON" : "OFF");
-    }
-    plat_enc(EN_K4);                     /* (free for now) */
+    plat_enc(EN_K3);                     /* (free for now) */
+    plat_enc(EN_K4);
 }
 
 void app_input_only(void) { input(); }
@@ -838,6 +839,10 @@ int app_expect(const char *what, int *got)
         *got = ui.picker;
     else if (!strcmp(what, "pick"))
         *got = ui.pick;
+    else if (!strcmp(what, "scan"))      /* the scanlines; the battery's estimate in percent */
+        *got = set.scan;
+    else if (!strcmp(what, "batt_pc"))
+        *got = batt_percent();
     else if (!strcmp(what, "ble_on"))    /* the radio on */
         *got = plat_ble_state() != BLE_OFF;
     else if (!strcmp(what, "view"))

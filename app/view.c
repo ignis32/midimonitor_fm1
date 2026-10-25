@@ -300,6 +300,26 @@ static char *addr_tail(char *d, const uint8_t *a)    /* "EE:FF": a Bluetooth add
     return s_hex2(d, a[5]);
 }
 
+/* The battery (GLO 1/3), an estimate: the converter's reading (plat_battery_raw, 10 bits) taken against the 3.2 V
+ * I/O supply through a 1:2 divider (an assumption, not measured; it puts the stock firmware's bar thresholds 531 561
+ * 591 at 3.32 3.51 3.70 V), the volts then a percentage on a lithium cell's discharge curve. mV, and percent (-1: no
+ * reading yet) */
+static uint32_t batt_mv(void) { return (uint32_t)plat_battery_raw() * 6400u / 1023u; }
+static int batt_percent(void)
+{
+    static const uint16_t MV[] = {3300, 3500, 3600, 3650, 3700, 3750, 3800, 3900, 4000, 4100, 4200};
+    static const uint8_t PC[] = {0, 3, 8, 15, 25, 40, 50, 65, 80, 90, 100};
+    uint32_t mv = batt_mv(), i;
+    if (!plat_battery_raw())
+        return -1;
+    if (mv <= MV[0])
+        return 0;
+    for (i = 1; i < sizeof MV / sizeof MV[0]; i++)
+        if (mv < MV[i])
+            return PC[i - 1] + (int)((mv - MV[i - 1]) * (uint32_t)(PC[i] - PC[i - 1]) / (uint32_t)(MV[i] - MV[i - 1]));
+    return 100;
+}
+
 /* Bluetooth's state in words (STATS, GLO 2/3): the radio; BLE-P's computer; BLE-C's device */
 static const char *bt_radio_word(void)
 {
@@ -492,6 +512,9 @@ static void draw_glo2(void)              /* GLO 3/3: the look, what the log keep
     y += 15;
     cv_text(4, y, &FONT_XS, "K2 PLATFORM SX", G_MID);
     cv_text(4 + 15 * CW, y, &FONT_XS, set.show_sys ? "LOGGED" : "HIDDEN", G_HI);
+    y += 15;
+    cv_text(4, y, &FONT_XS, "K3 SCANLINES", G_MID);
+    cv_text(4 + 15 * CW, y, &FONT_XS, set.scan ? "ON" : "OFF", G_HI);
     y += 22;
     for (i = 0; i < NSKINS; i++) {       /* every skin's shades, the one in use marked */
         uint32_t c;
@@ -505,7 +528,7 @@ static void draw_glo2(void)              /* GLO 3/3: the look, what the log keep
     cv_text(4, y, &FONT_XS, "PLATFORM SX: THE FM-1'S OWN SYSEX OVER", G_DIM);
     cv_text(4, y + 13, &FONT_XS, "USB (SCREEN READER, REMOTE, UPDATES).", G_DIM);
     cv_text(4, y + 26, &FONT_XS, "HIDDEN: NOT IN THE LOG OR ITS COUNTS.", G_DIM);
-    cv_text(4, y + 52, &FONT_XS, "GLO: BACK", G_FAINT);
+    cv_text(4, y + 46, &FONT_XS, "GLO: BACK", G_FAINT);
 }
 
 static void draw_glo(void)               /* GLO 1/3 (note 60, the USB port), 2/3 Bluetooth, 3/3 the look */
@@ -531,14 +554,44 @@ static void draw_glo(void)               /* GLO 1/3 (note 60, the USB port), 2/3
         cv_text(4, y, &FONT_XS, LABEL[i], G_MID);
         cv_text(4 + 14 * CW, y, &FONT_XS, val[i], G_HI);
     }
-    y += 12;
+    y += 8;
+    {   /* the battery: the percentage, a bar, and what it comes from (an estimate: batt_percent) */
+        char t[40], *d;
+        int pc = batt_percent();
+        uint32_t mv = batt_mv();
+        uint16_t c = pc < 0 ? G_DIM : pc <= 15 ? G_GLOW : G_HI;
+        cv_text(4, y + 6, &FONT_XS, "BATTERY", G_MID);
+        if (pc < 0) {
+            s_cat(t, "--");
+        } else {
+            d = s_dec(t, pc, 0);
+            s_cat(d, "%");
+        }
+        cv_text(64, y, &FONT_M, t, c);
+        cv_rect(128, y + 5, 104, 14, G_DIM);   /* the bar: an outline, filled to the percentage */
+        cv_rect(129, y + 6, 102, 12, G_BG);
+        if (pc > 0)
+            cv_rect(130, y + 7, pc, 10, c);
+        y += 28;
+        d = s_cat(t, "~");
+        d = s_dec(d, (int32_t)(mv / 1000u), 0);
+        *d++ = '.';
+        d = s_dec(d, (int32_t)(mv % 1000u / 10u), 2);
+        if (d[-2] == ' ')
+            d[-2] = '0';
+        d = s_cat(d, " V  RAW ");
+        d = s_dec(d, plat_battery_raw(), 0);
+        s_cat(d, plat_battery() == 4 ? "  ON USB POWER" : "  ESTIMATE");
+        cv_text(4, y, &FONT_XS, t, G_DIM);
+        y += 18;
+    }
     cv_text(4, y, &FONT_XS, "USB PORT", G_MID);
     cv_text(4, y + 14, &FONT_XS, " DEVICE MODE: A COMPUTER'S, AS USUAL", G_DIM);
     cv_text(4, y + 27, &FONT_XS, " HOST MODE: A USB MIDI CONTROLLER", G_DIM);
     cv_text(4, y + 40, &FONT_XS, "   OR SYNTH ON IT, POWERED BY A HUB", G_DIM);
     cv_text(4, y + 53, &FONT_XS, "   OR AN OTG ADAPTER", G_DIM);
     cv_text(4, y + 66, &FONT_XS, " EVERY POWER-ON: DEVICE MODE", G_DIM);
-    cv_text(4, y + 80, &FONT_XS, "GLO: BLUETOOTH, THEN THE LOOK", G_FAINT);
+    cv_text(4, y + 84, &FONT_XS, "GLO: BLUETOOTH, THEN THE LOOK", G_FAINT);
 }
 
 /* ----------------------------------------------------------------- STATS --- */
