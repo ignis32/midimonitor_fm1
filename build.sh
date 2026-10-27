@@ -8,6 +8,8 @@
 #                          identity FM-1_88XXYYZZ (a version may be given: sh build.sh release 0.2)
 #   sh build.sh version    print VERSION
 #   sh build.sh web        the browser emulator: app/build/emu
+#   sh build.sh site       the site (front page, installer, emulator) of the release package of VERSION (or the
+#                          version given) into app/build/site; after release and web
 # The toolchain and the SDK: JIELI_TOOLCHAIN and AC79_SDK, or a local.env beside this file (not in git) that sets them.
 set -e
 cd "$(dirname "$0")"
@@ -42,6 +44,10 @@ release)
     ;;
 web)
     $B --web
+    ;;
+site)
+    V=${2:-$(cat VERSION)}
+    python3 fm1-base/tools/make_site.py app "app/build/midimon-$V.fwsc" "$V" app/build/site
     ;;
 *)
     $B "$@"

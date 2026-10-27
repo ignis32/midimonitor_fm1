@@ -1,0 +1,41 @@
+The browser emulator's MIDI in through the MIDI tap (web/emu/emu_web.c): web_midi_bytes(port, n), the n bytes of one
+Web MIDI message in web_midi_buf(), as a cable on port PORT_* brings them. They go into the tap (plat_tap), as the host
+simulator's "raw" puts them, and a message other than SysEx into the app's queue too (web_midi_in), as "midi" does.
+web_midi_in alone reaches only the queue, and SysEx, system common and real-time not at all.
+Why MIDIMON needs it: its log reads the tap, so Web MIDI in the emulator page (app/web/emu/) showed nothing.
+Applies to: fm1-base aa2b3bc, after 0001-0004 (0001's tap). Upstream: not offered yet.
+diff --git a/web/emu/emu_web.c b/web/emu/emu_web.c
+index 4e182de..7812e73 100644
+--- a/web/emu/emu_web.c
++++ b/web/emu/emu_web.c
+@@ -122,6 +122,30 @@ __attribute__((used, visibility("default"))) void web_midi_in(uint32_t port, uin
+         min_port[mi_w++ % MQ] = port;
+     }
+ }
++/* MIDI in from the page as bytes (one Web MIDI message: SysEx, system common and real-time too), as a cable on port
++ * PORT_* brings it: into the MIDI tap (plat_tap, as host "raw" does), and a message other than SysEx into the
++ * app's queue (web_midi_in) too, as host "midi" does */
++static uint8_t raw_in[512];
++__attribute__((used, visibility("default"))) uint8_t *web_midi_buf(void) { return raw_in; }
++__attribute__((used, visibility("default"))) void web_midi_bytes(uint32_t port, uint32_t n)
++{
++    uint32_t st = raw_in[0], k, pkt;
++    if (port >= NPORTS || n == 0u)
++        return;
++    if (n > sizeof raw_in)
++        n = sizeof raw_in;
++    host_tap_raw(port == PORT_TRS ? TAP_TRS : port == PORT_BLE ? TAP_BLE_HOST : TAP_USB, raw_in, n);
++    if (st < 0x80u || st == 0xF0u || st == 0xF7u)
++        return;
++    k = 1u + tap_need(st);
++    pkt = st >= 0xF8u ? 0xFu : st >= 0xF0u ? (k == 1u ? 5u : k) : st >> 4;
++    pkt |= st << 8;
++    if (k > 1u && n > 1u)
++        pkt |= (uint32_t)raw_in[1] << 16;
++    if (k > 2u && n > 2u)
++        pkt |= (uint32_t)raw_in[2] << 24;
++    web_midi_in(port, pkt);
++}
+ __attribute__((used, visibility("default"))) uint32_t web_out_n(void) { return n_out; }
+ __attribute__((used, visibility("default"))) uint32_t *web_out_pkts(void) { return out_pkt; }
+ __attribute__((used, visibility("default"))) void web_out_clear(void) { n_out = 0; }
