@@ -31,7 +31,7 @@ static struct {                        /* a SysEx coming in, per source */
     uint8_t open;
     uint32_t ms, n;
     uint8_t b[SX_KEEP];
-} sx_in[NTAPS];
+} sx_open[NTAPS];                      /* (not sx_in: fm1-base's web emulator has one in the same unit) */
 
 static uint32_t src_events[NTAPS], src_lost_seen[NTAPS];
 
@@ -83,37 +83,37 @@ static void sx_end(uint32_t src, int whole)
 {
     ev_t *e;
     uint32_t i, k;
-    if (!sx_in[src].open)
+    if (!sx_open[src].open)
         return;
-    k = sx_in[src].n < SX_KEEP ? sx_in[src].n : SX_KEEP;
-    if (src == TAP_USB && !set.show_sys && sx_platform(sx_in[src].b, k)) {
-        sx_in[src].open = 0;           /* not logged unless asked (GLO 2) */
+    k = sx_open[src].n < SX_KEEP ? sx_open[src].n : SX_KEEP;
+    if (src == TAP_USB && !set.show_sys && sx_platform(sx_open[src].b, k)) {
+        sx_open[src].open = 0;           /* not logged unless asked (GLO 2) */
         return;
     }
-    e = ev_new(sx_in[src].ms, src, whole ? EV_SYSEX : EV_SXCUT, TY_SYSEX);
+    e = ev_new(sx_open[src].ms, src, whole ? EV_SYSEX : EV_SXCUT, TY_SYSEX);
     e->sxo = sx_w;
-    e->sxn = (uint16_t)(sx_in[src].n < 0xFFFFu ? sx_in[src].n : 0xFFFFu);
+    e->sxn = (uint16_t)(sx_open[src].n < 0xFFFFu ? sx_open[src].n : 0xFFFFu);
     e->sxk = (uint16_t)k;
     for (i = 0; i < k; i++)
-        sx_ring[(sx_w + i) % SX_RING] = sx_in[src].b[i];
+        sx_ring[(sx_w + i) % SX_RING] = sx_open[src].b[i];
     sx_w += k;
     for (i = 0; i < 3u && i + 1u < k; i++)  /* the bytes after F0: the maker's ID */
-        e->b[i] = sx_in[src].b[i + 1];
-    sx_in[src].open = 0;
+        e->b[i] = sx_open[src].b[i + 1];
+    sx_open[src].open = 0;
     ev_done(e);
 }
 
 static void sx_byte(uint32_t src, uint32_t b, uint32_t ms)
 {
-    if (b == 0xF0u || !sx_in[src].open) {
+    if (b == 0xF0u || !sx_open[src].open) {
         sx_end(src, 0);                /* an F0 before the last one's F7 */
-        sx_in[src].open = 1;
-        sx_in[src].ms = ms;
-        sx_in[src].n = 0;
+        sx_open[src].open = 1;
+        sx_open[src].ms = ms;
+        sx_open[src].n = 0;
     }
-    if (sx_in[src].n < SX_KEEP)
-        sx_in[src].b[sx_in[src].n] = (uint8_t)b;
-    sx_in[src].n++;
+    if (sx_open[src].n < SX_KEEP)
+        sx_open[src].b[sx_open[src].n] = (uint8_t)b;
+    sx_open[src].n++;
     if (b == 0xF7u)
         sx_end(src, 1);
 }
@@ -145,7 +145,7 @@ static void mon_poll(void)
             sx_end(src, 0);
             continue;
         }
-        if (sx_in[src].open && !(kind == TK_MSG && b0 >= 0xF8u))
+        if (sx_open[src].open && !(kind == TK_MSG && b0 >= 0xF8u))
             sx_end(src, 0);            /* (over USB a message just ends it) */
         e = ev_new(ms, src, kind == TK_MSG ? EV_MSG : kind == TK_RS ? EV_RS : kind == TK_CUT ? EV_CUT : EV_STRAY,
                    kind == TK_MSG || kind == TK_RS ? ev_type(b0) : TY_ERR);
@@ -161,7 +161,7 @@ static void mon_clear(void)
     uint32_t s;
     ev_w = 0;
     for (s = 0; s < NTAPS; s++)
-        sx_in[s].open = 0;
+        sx_open[s].open = 0;
 }
 
 static const ev_t *ev_at(uint32_t i) { return &ev_ring[i % EV_RING]; }   /* i < ev_w, ev_w - i <= EV_RING */
