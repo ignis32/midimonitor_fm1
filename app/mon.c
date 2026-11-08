@@ -167,7 +167,8 @@ static void mon_clear(void)
 static const ev_t *ev_at(uint32_t i) { return &ev_ring[i % EV_RING]; }   /* i < ev_w, ev_w - i <= EV_RING */
 static uint32_t ev_oldest(void) { return ev_w > EV_RING ? ev_w - EV_RING : 0u; }
 static int sx_kept(const ev_t *e) { return sx_w - e->sxo <= SX_RING; }   /* its bytes not yet written over */
-static uint32_t sx_at(const ev_t *e, uint32_t i) { return sx_ring[(e->sxo + i) % SX_RING]; }
+static uint32_t sx_byte_at(const ev_t *e, uint32_t i) { return sx_ring[(e->sxo + i) % SX_RING]; }   /* (usb.c has
+                                                                                         * an sx_at: one unit) */
 
 /* ------------------------------------------------------------------ text --- */
 static const char HEXD[] = "0123456789ABCDEF";
@@ -316,7 +317,7 @@ static void ev_hex(const ev_t *e, char *d, int max)
             s_cat(d, "..");
             return;
         }
-        d = s_hex2(d, sx_at(e, i));
+        d = s_hex2(d, sx_byte_at(e, i));
         if (i + 1u < n)
             *d++ = ' ';
     }

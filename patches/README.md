@@ -41,12 +41,13 @@ whether it has been offered upstream. Patched files are MPL-2.0 as the originals
 
 | Patch | What |
 | --- | --- |
-| `felucca-bsp/0001-usb-midi-host-pr7.patch` | felucca-bsp's own [pull request #7](https://github.com/hugelton/felucca-bsp/pull/7), unchanged: the USB MIDI host, in and out (Adrien Tibi's and Kerem Kilic's, MPL-2.0 by their word: quoted in the patch and LICENSING.md). Goes when felucca-bsp merges it |
-| `felucca-bsp/0002-midi-tap-usb.patch` | USB's side of the MIDI tap: every USB-MIDI packet in, from a computer or from a device on the host port, copied to the tap before it is sorted |
-| `fm1-base/0001-midi-tap.patch` | the MIDI tap (`plat_tap`, `device/midi_tap.c`): every byte from USB, the jack and each Bluetooth link, as it came; the simulator's `raw` |
-| `fm1-base/0002-usb-host.patch` | the USB host for apps: `FM1B_USB_HOST`, `plat_usb_host` / `_state` / `_event`, the main loop's `usb_host_task`, the simulator's `usbhost` |
-| `fm1-base/0003-ble-advertise-name-addr.patch` | Bluetooth: `plat_ble_advertise` (BLE-Periphery on / off, from tornado), fm1.toml `ble_name` up to 29 characters (whole in the scan response), `plat_ble_found_addr`; the simulator's `ble devices N`, `ble lose` |
-| `fm1-base/0004-battery-raw.patch` | `plat_battery_raw`: the battery's smoothed reading, for MIDIMON's percentage; the simulator's `battery RAW` |
+| `felucca-bsp/0001-midi-tap-usb-host.patch` | the MIDI tap's USB host side: every USB-MIDI packet from a device on the host port, copied to the tap before it is sorted (the computer's side is felucca-bsp's `FELUCCA_MIDI_IN_RAW`, no patch) |
+| `fm1-base/0001-midi-tap.patch` | the MIDI tap (`plat_tap`, `device/midi_tap.c`): every byte from USB, the jack and each Bluetooth link, as it came; the simulator's `raw`, and `midi` / `usbh midi` into the tap |
+| `fm1-base/0002-ble-advertise-name-addr.patch` | Bluetooth: `plat_ble_advertise` (BLE-Periphery on / off, from tornado), fm1.toml `ble_name` up to 29 characters (whole in the scan response; upstream's "FM-1 1F2D" without it), `plat_ble_found_addr`; the simulator's `ble devices N`, `ble lose` |
+| `fm1-base/0003-battery-average.patch` | the battery reading's average, which upstream's never moved for a difference under 16; the simulator's `battery RAW` |
+| `fm1-base/0004-web-midi-bytes.patch` | the browser emulator's Web MIDI in through the tap (`web_midi_bytes`) |
 
-Upstream took in what MIDIMON's earlier copy of fm1-base changed for Bluetooth (each link addressed apart:
-`TO_BLE_HOST`, `TO_BLE_DEV`; the send stall per link), so those are no longer patches.
+Upstream took in what MIDIMON's earlier copies changed: Bluetooth's links addressed apart (`TO_BLE_HOST`,
+`TO_BLE_DEV`) and the send stall per link; the USB MIDI host (felucca-bsp's pull request #7, merged; fm1-base's
+`usb_host = true`, `plat_usb_host` / `_state` / `_msg`, the simulator's `usbh`); `plat_battery_raw` (`APP_BATTERY_RAW`).
+So those are no longer patches.

@@ -707,7 +707,7 @@ void app_frame(void)
         static const char *const W[] = {"", "HOST MODE", "DEVICE MODE", "MIDI IN", "NOT USB MIDI",
                                         "LOW SPEED: NO", "MIDI LOST"};
         int ev;
-        while ((ev = plat_usb_host_event()) != USBH_EV_NONE)
+        while ((ev = plat_usb_host_msg()) != USBH_MSG_NONE)
             app_say("USB", ev < (int)(sizeof W / sizeof W[0]) ? W[ev] : "?");
     }
     if (FM1B_BLE) {                      /* Bluetooth: scanning, connecting, what happened (ble.c) */

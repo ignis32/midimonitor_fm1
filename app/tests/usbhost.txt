@@ -1,5 +1,5 @@
 # The USB-C port: DEVICE MODE (the computer's) or HOST MODE (a USB MIDI device on it; GLO 1/3 K2, asks; never kept): the
-# platform's host simulated ("usbhost")
+# platform's host simulated ("usbh": fm1-base's model, a device connects 150 ms after it is plugged in)
 wait 600
 expect usbh 0
 tap GLO
@@ -17,11 +17,13 @@ wait 20
 tap OCT+
 wait 50
 expect usbh 1
-usbhost nomidi
-wait 50
+usbh plug Plain_Hub nomidi
+wait 300
 expect usbh 1
-usbhost plug
-wait 50
+usbh unplug
+wait 20
+usbh plug Launchkey_Mini
+wait 300
 expect usbh 2
 shot usbh_glo.png
 # its MIDI comes as USB: in the log, by THRU too
@@ -32,13 +34,13 @@ wait 20
 tap GLO
 wait 50
 expect tab 0
-midi USB 90 3C 64
+usbh midi 90 3C 64
 raw USB F0 7E 7F 06 01 F7
 wait 1400
 expect last_src 0
 expect last_type 6
 shot usbh_log.png
-usbhost unplug
+usbh unplug
 wait 50
 expect usbh 1
 # back to DEVICE MODE

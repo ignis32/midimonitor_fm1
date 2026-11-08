@@ -11,7 +11,7 @@
 #define APP_CANVAS_PX (240u * 192u)      /* the log, whole: 16 lines */
 #define APP_LOOP                         /* app_loop: the tap drained every pass of the main loop */
 #define APP_BLE_AT_BOOT (mon_ble_on())   /* the radio at power-on: on unless BLE-P and BLE-C are both off (ble.c) */
-#define FM1B_USB_HOST 1                  /* the USB-C port as a USB MIDI host (GLO 1 K2; the usb host patches) */
+#define APP_BATTERY_RAW                  /* plat_battery_raw: the battery's reading, for GLO 1/3's percentage */
 int mon_ble_on(void);
 
 /* the store: the app's objects, the panel calibration (the platform's) and Bluetooth's address and pairing among

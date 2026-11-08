@@ -1,5 +1,15 @@
 # Changes
 
+## Next
+
+- **The newer FM-1s** (sold since autumn 2026, mostly from AliExpress) have another flash chip, a UC25HQ80 (JEDEC
+  B36014) instead of the Puya P25Q80 (856014). MIDIMON 0.4 and older took them for unknown: settings were not saved
+  and no firmware could be installed from MIDIMON. fm1-base now takes both (Laurens, fm1-base#35), and MIDIMON is
+  built on it (fm1-base 317cb86). An FM-1 with that chip stuck on an older MIDIMON goes back to stock first (through
+  the chip's own update mode: felucca-bsp's `tools/fm1_rescue.py`, or M-Flasher), then takes this one.
+- On a current fm1-base: the USB MIDI host is upstream's now (felucca-bsp's pull request #7, merged), and the
+  firmware installers' faster install (only the changed sectors) comes with it.
+
 ## 0.4
 
 - **USB name back to `MIDIMON FM-1`**: 0.3's `FM1_MONITOR` on USB lost the "FM-1" the firmware installers look

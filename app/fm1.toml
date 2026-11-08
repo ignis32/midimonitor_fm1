@@ -3,13 +3,14 @@ name = "MIDIMON"               # APP_NAME is in app.h; this names the build's fi
 id_prefix = "FM-1_88"          # package identity: dev FM-1_8800, releases FM-1_88XXYYZZ
 usb_manufacturer = "fm1-midimonitor"
 usb_product = "MIDIMON FM-1"    # "FM-1" in it: the firmware installers find the FM-1 on USB by it
-ble_name = "FM1_MONITOR"        # Bluetooth (patches/fm1-base/0003: shortened in the advertising packet, whole in the scan response)
+ble_name = "FM1_MONITOR"        # Bluetooth (patches/fm1-base/0002: shortened in the advertising packet, whole in the scan response)
 o2 = []                        # separate units compiled at -O2
 words = "words.tsv"
 fontset = "terminus"           # the terminal look: Terminus bitmap fonts (assets/fonts)
 ble = true                    # Bluetooth MIDI (--no-ble builds without it)
 ble_central = true             # and the FM-1 connects to Bluetooth MIDI devices too
-usb_audio_in = false           # a MIDI device only on the computer: no USB audio either way
+usb_host = true                # the USB-C port as a USB MIDI host when asked (GLO 1/3 K2: HOST MODE)
+usb_audio_in = false          # a MIDI device only on the computer: no USB audio either way
 usb_audio_out = false
 # the site (tools/make_site.py, tools/publish_site.sh)
 tagline = "a MIDI monitor, thru router and clock for the FM-1"

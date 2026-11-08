@@ -14,10 +14,11 @@ fm1-base's `LICENSING.md` says where its code comes from: Leo Kuroshita's Felucc
 permission ([hugelton/felucca-bsp#4](https://github.com/hugelton/felucca-bsp/issues/4)), Charles Vestal's own, and
 the parts of `fm1-base/ble/` that repeat the JieLi AC79 SDK (Apache-2.0, `MPL-2.0 AND Apache-2.0` in their headers).
 
-## The USB MIDI host (patches/felucca-bsp/0001-usb-midi-host-pr7.patch)
+## The USB MIDI host (felucca-bsp, from its pull request #7)
 
-This patch is felucca-bsp's own pull request [#7](https://github.com/hugelton/felucca-bsp/pull/7), unchanged (open
-when taken; once merged, the patch goes). It adds to felucca-bsp `chip/usb_host.c`, `chip/usb_host_desc.h`, the host
+felucca-bsp's pull request [#7](https://github.com/hugelton/felucca-bsp/pull/7) is merged upstream (felucca-bsp
+ea3d2e3, in fm1-base since 2cd696a: fm1.toml `usb_host = true`); MIDIMON carried it as a patch until then. It adds to
+felucca-bsp `chip/usb_host.c`, `chip/usb_host_desc.h`, the host
 routines in `chip/fm1_usb.h` and the host's integration in `chip/usb.c`: Melodee's USB MIDI host, where it is
 GPL-3.0-only, by two authors. Its own `NOTICE` and `LICENSING.md` record the source commits. It is here under
 **MPL-2.0 on these grounds only: each author's own word**, quoted verbatim with its links.
@@ -42,8 +43,8 @@ description:
 
 > "I also license my contributions to this port under MPL-2.0."
 
-This matters because a build with Bluetooth links JieLi's binary libraries: no GPL code may be in it. These quotes
-are in the patch's header too, and the pull request's files carry both authors' notices. The permissions cover
+This matters because a build with Bluetooth links JieLi's binary libraries: no GPL code may be in it. The pull
+request's files carry both authors' notices. The permissions cover
 these contributions only, not the rest of Melodee. The register sequences follow the public JieLi AC79 SDK.
 
 ## Not part of fm1-base

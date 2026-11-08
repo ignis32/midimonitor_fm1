@@ -185,6 +185,8 @@ spin K1 1
 wait 20
 expect midc 4
 # the battery's estimate: 640 of 1023 is ~4.00 V, 80 %; 531 (the stock firmware's last bar) ~3.32 V, 0 %
+battery 640
+wait 20
 expect batt_pc 80
 shot glo.png
 battery 531

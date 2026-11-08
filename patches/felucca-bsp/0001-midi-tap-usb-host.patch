@@ -1,0 +1,23 @@
+MIDI tap, USB host side: every USB-MIDI event packet from a device on the host port is copied to fm1-base's MIDI tap
+(device/midi_tap.c, patches/fm1-base/0001-midi-tap.patch) before it is sorted (usb_host.c uh_poll: its filter keeps
+SysEx from the app, not from the tap), so a monitor sees SysEx, system common, active sensing and reset too, which
+plat_midi_in leaves out. Only when FM1B_MIDI_TAP is defined (fm1-base's unity.c, with the tap). The computer's side
+needs no patch: usb.c's FELUCCA_MIDI_IN_RAW (felucca-bsp#15) gives the tap every packet (unity.c defines it).
+Why MIDIMON needs it: it is a MIDI monitor; plat_midi_in drops what it must show.
+Applies to: felucca-bsp 5b0879b (fm1-base 317cb86). Upstream: not offered yet (a raw hook in uh_poll, as
+FELUCCA_MIDI_IN_RAW in usb.c, would make it go).
+diff --git a/chip/usb_host.c b/chip/usb_host.c
+index 1f9a1e1..49726f6 100644
+--- a/chip/usb_host.c
++++ b/chip/usb_host.c
+@@ -563,6 +563,10 @@ static void uh_poll(void)
+         for (i = 0; i + 3u < n; i += 4u) {
+             uint32_t p = uh_midi_ok((uint32_t)uh_rx[i] | (uint32_t)uh_rx[i + 1] << 8 |
+                                     (uint32_t)uh_rx[i + 2] << 16 | (uint32_t)uh_rx[i + 3] << 24);
++#ifdef FM1B_MIDI_TAP
++            tap_usb((uint32_t)uh_rx[i] | (uint32_t)uh_rx[i + 1] << 8 | (uint32_t)uh_rx[i + 2] << 16 |
++                    (uint32_t)uh_rx[i + 3] << 24, fm1_ms);   /* the monitor's copy: all of it, SysEx too */
++#endif
+             if (p) {
+                 midi_enqueue(p, 1u);
+                 uh.events++;

@@ -141,8 +141,9 @@ submodule in `fm1-base/` pinned to an upstream commit, with [felucca-bsp](https:
 Leo Kuroshita inside it (`fm1-base/bsp/`). Both are used as upstream has them: the few changes MIDIMON needs in
 them are patches in [`patches/`](patches/README.md), each with what it does and why, applied before every build.
 Today they are: the MIDI tap (every byte from every source, stamped: what a monitor needs and an instrument doesn't),
-the USB MIDI host (felucca-bsp's own pull request #7, carried until it is merged) and its API for apps, and Bluetooth
-(BLE-Periphery on and off, the name `FM1_MONITOR`, the found devices' addresses).
+Bluetooth (BLE-Periphery on and off, the name `FM1_MONITOR`, the found devices' addresses), the battery reading's
+average, and the browser emulator's Web MIDI into the tap. The USB MIDI host is upstream's (felucca-bsp's pull
+request #7, merged).
 Following an fm1-base update is: revert the patches, bump the submodule, apply them again. See
 [LICENSING.md](LICENSING.md) and [CREDITS.md](CREDITS.md).
 
