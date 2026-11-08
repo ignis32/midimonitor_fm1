@@ -9,6 +9,11 @@
   the chip's own update mode: felucca-bsp's `tools/fm1_rescue.py`, or M-Flasher), then takes this one.
 - On a current fm1-base: the USB MIDI host is upstream's now (felucca-bsp's pull request #7, merged), and the
   firmware installers' faster install (only the changed sectors) comes with it.
+- **A site:** https://ignis32.github.io/midimonitor_fm1/, with the web installer and the firmware in the browser.
+  The installer offers m-bootloader 2.2 (fm1-base's carries 1.2, which stops at `BAD CONFIG` after stock V16 and
+  after which one FM-1 with the newer flash did not start). Hold PLAY at power-on for its menu, whose MIDI MODE
+  reinstalls a firmware from a browser.
+- `firmware.json` for firmware hubs.
 
 ## 0.4
 

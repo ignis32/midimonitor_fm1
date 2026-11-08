@@ -46,6 +46,7 @@ whether it has been offered upstream. Patched files are MPL-2.0 as the originals
 | `fm1-base/0002-ble-advertise-name-addr.patch` | Bluetooth: `plat_ble_advertise` (BLE-Periphery on / off, from tornado), fm1.toml `ble_name` up to 29 characters (whole in the scan response; upstream's "FM-1 1F2D" without it), `plat_ble_found_addr`; the simulator's `ble devices N`, `ble lose` |
 | `fm1-base/0003-battery-average.patch` | the battery reading's average, which upstream's never moved for a difference under 16; the simulator's `battery RAW` |
 | `fm1-base/0004-web-midi-bytes.patch` | the browser emulator's Web MIDI in through the tap (`web_midi_bytes`) |
+| `fm1-base/0005-site-mboot-from-app.patch` | the site's m-bootloader from the firmware (fm1.toml `mboot`, `mboot_version`): MIDIMON's installer offers 2.2 (`app/site/m-bootloader/`), not fm1-base's 1.2 |
 
 Upstream took in what MIDIMON's earlier copies changed: Bluetooth's links addressed apart (`TO_BLE_HOST`,
 `TO_BLE_DEV`) and the send stall per link; the USB MIDI host (felucca-bsp's pull request #7, merged; fm1-base's

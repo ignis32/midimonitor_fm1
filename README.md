@@ -112,9 +112,12 @@ are USB, BLE-P and BLE-C.
 
 ## Installing
 
-Install MIDIMON with the web installer or `python3 fm1-base/tools/fm1_install.py midimon-X.Y.fwsc`, over the stock
+Install MIDIMON with the [web installer](https://ignis32.github.io/midimonitor_fm1/install/) (Chrome or Edge, the
+FM-1 on USB; it can add [m-bootloader](https://github.com/jvitkauskas/m-bootloader) 2.2 too) or
+`python3 fm1-base/tools/fm1_install.py midimon-X.Y.fwsc`, over the stock
 firmware, another custom firmware (tested over Felucca) or an earlier MIDIMON. Its settings live in the flash's data
-area; another firmware's settings at 0xFC000 are left alone.
+area; another firmware's settings at 0xFC000 are left alone. The site, with the installer and the firmware in the
+browser: https://ignis32.github.io/midimonitor_fm1/
 
 Releases are built on GitHub by The Firmware Hub's shared workflow
 ([zvenson/fm1-build](https://github.com/zvenson/fm1-build)) and carry a build attestation. To check a file:

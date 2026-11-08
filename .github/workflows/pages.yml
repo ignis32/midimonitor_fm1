@@ -1,0 +1,55 @@
+# The site, https://ignis32.github.io/midimonitor_fm1/ (sh build.sh site: fm1-base's make_site): the front page
+# (app/site/landing.md), install/ (the installer, for the latest release's attested package, and m-bootloader) and
+# emu/ (the firmware in the browser). After the release workflow succeeds on a tag (its release is made with
+# GITHUB_TOKEN, which starts no workflow itself), or by hand.
+name: pages
+
+on:
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  site:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: the latest release's package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          mkdir -p app/build
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern 'midimon-*.fwsc' --dir app/build
+          echo "VER=${tag#v}" >> "$GITHUB_ENV"
+      - name: the emulator (Emscripten, as fm1-base's --web build wants it)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src emscripten/emsdk:6.0.12 \
+            sh -c 'pip install --quiet --break-system-packages pillow==11.3.0 && sh build.sh web && chown -R '"$(id -u):$(id -g)"' /src'
+      - name: the site
+        run: |
+          pip install --quiet pillow==11.3.0
+          sh build.sh site "$VER"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/build/site
+      - id: deploy
+        uses: actions/deploy-pages@v4

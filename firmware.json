@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "id": "midimon",
+  "name": "MIDIMON",
+  "author": "ignis32",
+  "license": "MPL-2.0",
+  "tagline": "a MIDI monitor, thru router and clock for the FM-1",
+  "description": "A MIDI monitor for USB, the TRS jack and Bluetooth (as device and host at once): hex or words, filters, stats. Its THRU routes, each filtered, make the FM-1 a Bluetooth MIDI dongle.",
+  "tags": ["midi", "utility"],
+  "install": "https://ignis32.github.io/midimonitor_fm1/install/",
+  "site": "https://ignis32.github.io/midimonitor_fm1/",
+  "source": "https://github.com/ignis32/midimonitor_fm1",
+  "screenshot": "docs/screen-log.png",
+  "hardware": {
+    "models": ["FM-1"],
+    "flash": ["856014", "B36014"],
+    "features": ["bluetooth-midi", "bluetooth-midi-devices", "usb-midi-host", "screen-reader"]
+  },
+  "credits": "Built on fm1-base by Charles Vestal and felucca-bsp."
+}

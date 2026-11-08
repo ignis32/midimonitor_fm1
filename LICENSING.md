@@ -51,6 +51,7 @@ these contributions only, not the rest of Melodee. The register sequences follow
 
 | What | Licence | Where |
 | --- | --- | --- |
+| m-bootloader 2.2 (Julius Vitkauskas, github.com/jvitkauskas/m-bootloader): its FM-1 package, which the site's installer offers to install | MIT | `app/site/m-bootloader/` (with its `LICENSE`) |
 | Terminus (Dimitar Toshkov Zhekov) | SIL OFL 1.1 | `fm1-base/assets/fonts/ter-u*.bdf`, `fm1-base/assets/fonts/Terminus-LICENSE.txt` |
 | JieLi AC79 SDK files a package needs (`uboot.boot`, `cfg_tool.bin`, `eq_cfg_hw.bin`) | Apache-2.0 | read from your SDK checkout at build time; never in this repository |
 | JieLi's Bluetooth libraries (`btctrler.a`, `btstack.a`, `wl_rf_common.a`, ...: binary only) and the few SDK sources and headers they need | Apache-2.0 | copied from your SDK checkout into the build by a build with `ble = true`; never in this repository |

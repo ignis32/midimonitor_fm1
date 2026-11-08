@@ -1,0 +1,57 @@
+The site's m-bootloader from the firmware (tools/make_site.py): fm1.toml mboot = "DIR" (in APP_DIR: fm1-uboot-X.Y.fwsc
+and its LICENSE) and mboot_version = "X.Y" make the installer offer that package instead of fm1-base's
+(web/m-bootloader/, MBOOT_VERSION 1.2). Without the keys nothing changes. The package is checked for m-bootloader's
+identity (FM-1_099), which the installer page asks for too.
+Why MIDIMON needs it: fm1-base carries m-bootloader 1.2, which stops at BAD CONFIG with stock V16's boot area (fixed
+in 1.3) and after which one FM-1 with the newer UC25HQ80 flash did not start; MIDIMON's installer offers 2.2
+(app/site/m-bootloader/README.md). Goes when fm1-base carries 2.2 or newer, or takes the option.
+Applies to: fm1-base 317cb86, after 0001-0004. Upstream: not offered yet (a pull request would be this file alone).
+diff --git a/tools/make_site.py b/tools/make_site.py
+index d340a91..f137de7 100755
+--- a/tools/make_site.py
++++ b/tools/make_site.py
+@@ -17,7 +17,9 @@
+   firmware/NAME-VERSION.fwsc  the package the installer writes; also the download
+   firmware/NAME-VERSION-res.bin  the resource region (fm1.toml resources), when PKG_STEM-res.bin is beside the
+                               package (tools/build.py): the installer writes it after the firmware
+-  firmware/m-bootloader-X.Y.fwsc  m-bootloader (MIT), which the installer offers after the firmware
++  firmware/m-bootloader-X.Y.fwsc  m-bootloader (MIT), which the installer offers after the firmware: fm1-base's
++                              (web/m-bootloader/, MBOOT_VERSION), or the firmware's own with fm1.toml mboot = "DIR"
++                              (in APP_DIR: fm1-uboot-X.Y.fwsc and LICENSE) and mboot_version = "X.Y"
+ 
+   tools/make_site.py APP_DIR APP_DIR/build/NAME-VERSION.fwsc VERSION OUT_DIR
+ 
+@@ -143,11 +145,20 @@ def main(app, pkg, version, out):
+         except ResError as e:
+             raise SystemExit(f"{res_src}: {e}")
+         shutil.copy(res_src, out / "firmware" / res_name)
+-    # m-bootloader (MIT), which the installer offers to install after the firmware, with its licence
+-    boot = SRC / "web" / "m-bootloader" / f"fm1-uboot-{MBOOT_VERSION}.fwsc"
+-    boot_name = f"m-bootloader-{MBOOT_VERSION}.fwsc"
++    # m-bootloader (MIT), which the installer offers to install after the firmware, with its licence: fm1-base's, or
++    # the firmware's own (fm1.toml mboot = "DIR" beside APP_DIR's files, holding fm1-uboot-X.Y.fwsc and its LICENSE,
++    # and mboot_version = "X.Y"), for a firmware that wants another release than fm1-base carries
++    mboot_dir, mboot_version = SRC / "web" / "m-bootloader", MBOOT_VERSION
++    if conf.get("mboot"):
++        if not re.fullmatch(r"\d+(\.\d+)+", str(conf.get("mboot_version", ""))):
++            raise SystemExit("fm1.toml mboot: needs mboot_version = \"X.Y\" (its file: fm1-uboot-X.Y.fwsc)")
++        mboot_dir, mboot_version = app / conf["mboot"], conf["mboot_version"]
++    boot = mboot_dir / f"fm1-uboot-{mboot_version}.fwsc"
++    boot_name = f"m-bootloader-{mboot_version}.fwsc"
++    if product_of(boot.read_bytes()) != "FM-1_099":
++        raise SystemExit(f"{boot}: not m-bootloader's package (its identity is FM-1_099)")
+     shutil.copy(boot, out / "firmware" / boot_name)
+-    shutil.copy(SRC / "web" / "m-bootloader" / "LICENSE", out / "firmware" / "m-bootloader-LICENSE.txt")
++    shutil.copy(mboot_dir / "LICENSE", out / "firmware" / "m-bootloader-LICENSE.txt")
+     for lic in sorted((SRC / "LICENSES").glob("*.txt")):   # the packages' parts under other licences (the JieLi SDK
+         shutil.copy(lic, out / "firmware" / lic.name)      # files, an own-stack build's Apache / BSD parts): beside them
+     # the installer
+@@ -157,7 +168,7 @@ def main(app, pkg, version, out):
+     meta = json.dumps({"version": version, "product": product, "pkg": "../firmware/" + name,
+                        "backup": bool(conf.get("backup")),
+                        "res": "../firmware/" + res_name if res_src.exists() else None,
+-                       "boot": {"pkg": "../firmware/" + boot_name, "version": MBOOT_VERSION,
++                       "boot": {"pkg": "../firmware/" + boot_name, "version": mboot_version,
+                                 "sha256": hashlib.sha256(boot.read_bytes()).hexdigest()}})
+     for mark in ("/*LIB*/", "/*META*/"):
+         if html.count(mark) != 1:
