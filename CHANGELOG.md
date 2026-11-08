@@ -1,6 +1,6 @@
 # Changes
 
-## Next
+## 0.5
 
 - **The newer FM-1s** (sold since autumn 2026, mostly from AliExpress) have another flash chip, a UC25HQ80 (JEDEC
   B36014) instead of the Puya P25Q80 (856014). MIDIMON 0.4 and older took them for unknown: settings were not saved
