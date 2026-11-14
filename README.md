@@ -157,3 +157,5 @@ MPL-2.0, as fm1-base (`LICENSE`). A build with Bluetooth links JieLi's binary Bl
 USB MIDI host, by Adrien Tibi and Kerem Kilic, is MPL-2.0 by its authors' explicit permission: Adrien's
 [comment](https://github.com/keremimo/melodee/pull/75#issuecomment-6384184014) on Melodee #75 and Kerem's
 [felucca-bsp #7](https://github.com/hugelton/felucca-bsp/pull/7), both quoted in [LICENSING.md](LICENSING.md).
+
+You can also try MIDIMON in the browser, no flashing needed, in the free community [FM-1 Emulator](https://fm1-emulator.atst.tools/).
